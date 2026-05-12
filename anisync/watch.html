@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Watch anime with friends - AniSync">
+  <meta name="theme-color" content="#6366f1">
+  
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  
+  <!-- Preload fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <title>Watch - AniSync</title>
+  
+  <style>
+    :root {
+      --primary: #6366f1;
+      --secondary: #ec4899;
+      --bg-dark: #0f0f13;
+    }
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f0f13 0%, #1a1a2e 100%);
+      color: #f1f5f9;
+      min-height: 100vh;
+    }
+    
+    .loading-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-dark);
+      z-index: 9999;
+    }
+    
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(99, 102, 241, 0.3);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+  
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body class="no-context-menu">
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-spinner"></div>
+  </div>
+  
+  <!-- Header -->
+  <header class="header">
+    <div class="container header-content">
+      <a href="index.html" class="logo">✨ AniSync</a>
+      
+      <nav>
+        <ul class="nav-links">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="dashboard.html">Who's Watching</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+  
+  <!-- Main Content -->
+  <main class="container page-transition" style="padding-top: 2rem;">
+    <!-- Anime Title -->
+    <div class="mb-3">
+      <h1 id="anime-title">Loading...</h1>
+      <p id="episode-info" style="color: var(--text-secondary);">Episode 1</p>
+    </div>
+    
+    <!-- Video Player -->
+    <div class="player-container" id="player-container">
+      <div class="sync-pulse"></div>
+      <div id="player-wrapper" class="player-wrapper">
+        <!-- iframe will be injected here -->
+      </div>
+      
+      <!-- Custom Controls Overlay -->
+      <div class="player-controls" id="player-controls">
+        <button class="control-btn" id="play-pause-btn" title="Play/Pause">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </button>
+        
+        <div class="progress-bar" id="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        
+        <span id="time-display" style="font-size: 0.875rem; min-width: 80px;">0:00 / 0:00</span>
+        
+        <button class="control-btn" id="volume-btn" title="Volume">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+          </svg>
+        </button>
+        
+        <button class="control-btn" id="fullscreen-btn" title="Fullscreen">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Episode Selector & Room Controls -->
+    <div class="episode-selector">
+      <span class="episode-label">Episode:</span>
+      <select class="episode-select" id="episode-select">
+        <option value="1">Episode 1</option>
+        <option value="2">Episode 2</option>
+        <option value="3">Episode 3</option>
+        <option value="4">Episode 4</option>
+        <option value="5">Episode 5</option>
+      </select>
+      
+      <div class="auto-advance-toggle" id="auto-advance-toggle">
+        <span>Auto-play</span>
+        <div class="toggle-switch" id="auto-advance-switch">
+          <div class="toggle-knob"></div>
+        </div>
+      </div>
+      
+      <button class="glass-button primary ripple" id="create-room-btn">
+        🎉 Create Room
+      </button>
+      
+      <button class="glass-button ripple hidden" id="join-room-btn">
+        👥 Join Room
+      </button>
+    </div>
+    
+    <!-- Room Info (shown when in a room) -->
+    <div id="room-info" class="glass-panel mt-3 p-3 hidden">
+      <div class="flex items-center justify-between">
+        <div>
+          <strong>🎬 Watch Party Active</strong>
+          <p style="font-size: 0.875rem; color: var(--text-secondary);">Room ID: <span id="room-id-display">---</span></p>
+        </div>
+        <button class="glass-button ripple" id="copy-invite-btn">
+          📋 Copy Invite Link
+        </button>
+      </div>
+    </div>
+  </main>
+  
+  <!-- Emoji Picker -->
+  <div class="emoji-picker" id="emoji-picker">
+    <button class="emoji-btn">😀</button>
+    <button class="emoji-btn">😂</button>
+    <button class="emoji-btn">😍</button>
+    <button class="emoji-btn">🔥</button>
+    <button class="emoji-btn">❤️</button>
+    <button class="emoji-btn">👍</button>
+    <button class="emoji-btn">🎉</button>
+    <button class="emoji-btn">😮</button>
+    <button class="emoji-btn">😢</button>
+    <button class="emoji-btn">😴</button>
+  </div>
+  
+  <script>
+    // Remove loading screen
+    window.addEventListener('load', () => {
+      const loadingScreen = document.getElementById('loading-screen');
+      if (loadingScreen) {
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => loadingScreen.remove(), 300);
+      }
+    });
+  </script>
+  
+  <script type="module">
+    import { initRoomPage } from './js/room.js';
+    import { createRoom, joinRoom } from './js/app.js';
+    import { copyToClipboard, showToast, disableContextMenu } from './js/utils.js';
+    
+    // Get URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const animeId = urlParams.get('id') || '1';
+    const roomId = urlParams.get('room');
+    
+    // State
+    let roomManager = null;
+    let isHost = false;
+    let autoAdvance = false;
+    let currentEpisode = 1;
+    
+    // Mock anime data
+    const animeData = {
+      '1': { title: 'Demon Slayer: Kimetsu no Yaiba', episodes: 26 },
+      '2': { title: 'Attack on Titan', episodes: 75 },
+      '3': { title: 'Jujutsu Kaisen', episodes: 24 },
+      '4': { title: 'One Piece', episodes: 1000 },
+      '5': { title: 'My Hero Academia', episodes: 113 }
+    };
+    
+    // Initialize page
+    function init() {
+      const anime = animeData[animeId] || animeData['1'];
+      document.getElementById('anime-title').textContent = anime.title;
+      document.getElementById('episode-info').textContent = `Episode ${currentEpisode} of ${anime.episodes}`;
+      
+      // Setup episode selector
+      setupEpisodeSelector(anime.episodes);
+      
+      // Load video player
+      loadVideoPlayer(animeId, currentEpisode);
+      
+      // Setup controls
+      setupPlayerControls();
+      
+      // Setup room buttons
+      setupRoomButtons();
+      
+      // If joining a room
+      if (roomId) {
+        joinExistingRoom(roomId);
+      }
+      
+      // Disable context menu
+      disableContextMenu();
+    }
+    
+    function setupEpisodeSelector(totalEpisodes) {
+      const select = document.getElementById('episode-select');
+      select.innerHTML = '';
+      
+      for (let i = 1; i <= Math.min(totalEpisodes, 100); i++) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = `Episode ${i}`;
+        if (i === currentEpisode) option.selected = true;
+        select.appendChild(option);
+      }
+      
+      select.addEventListener('change', (e) => {
+        currentEpisode = parseInt(e.target.value);
+        document.getElementById('episode-info').textContent = `Episode ${currentEpisode} of ${totalEpisodes}`;
+        loadVideoPlayer(animeId, currentEpisode);
+        
+        // Sync episode change if host
+        if (isHost && roomManager) {
+          roomManager.broadcastSync('seek', 0);
+        }
+      });
+    }
+    
+    function loadVideoPlayer(animeId, episode) {
+      const wrapper = document.getElementById('player-wrapper');
+      
+      // Show loading state
+      wrapper.innerHTML = `
+        <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #000;">
+          <div class="loading-spinner"></div>
+        </div>
+      `;
+      
+      // In production, this would fetch from your proxy API
+      // For demo, we'll use a placeholder or mock stream
+      setTimeout(() => {
+        // Mock embed URL - in production this comes from your backend proxy
+        // The actual MegaPlay URL is obfuscated and set server-side
+        const mockEmbedUrl = 'https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=0&controls=0';
+        
+        wrapper.innerHTML = `
+          <iframe 
+            src="${mockEmbedUrl}" 
+            frameborder="0" 
+            allowfullscreen 
+            allow="autoplay; encrypted-media"
+            sandbox="allow-same-origin allow-scripts allow-presentation"
+          ></iframe>
+        `;
+      }, 1000);
+    }
+    
+    function setupPlayerControls() {
+      const playPauseBtn = document.getElementById('play-pause-btn');
+      const fullscreenBtn = document.getElementById('fullscreen-btn');
+      const progressBar = document.getElementById('progress-bar');
+      const progressFill = document.getElementById('progress-fill');
+      const timeDisplay = document.getElementById('time-display');
+      const playerContainer = document.getElementById('player-container');
+      
+      let isPlaying = false;
+      let currentTime = 0;
+      let duration = 600; // Mock 10 minutes
+      
+      // Play/Pause
+      playPauseBtn.addEventListener('click', () => {
+        isPlaying = !isPlaying;
+        playerContainer.classList.toggle('paused', !isPlaying);
+        
+        // Update icon
+        playPauseBtn.innerHTML = isPlaying 
+          ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
+          : '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+        
+        // Broadcast sync if host
+        if (isHost && roomManager) {
+          roomManager.broadcastSync(isPlaying ? 'play' : 'pause', currentTime);
+        }
+        
+        // Simulate progress
+        if (isPlaying) {
+          simulateProgress();
+        }
+      });
+      
+      // Fullscreen
+      fullscreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          playerContainer.requestFullscreen().catch(err => {
+            console.log('Fullscreen error:', err);
+          });
+        } else {
+          document.exitFullscreen();
+        }
+      });
+      
+      // Progress bar click
+      progressBar.addEventListener('click', (e) => {
+        const rect = progressBar.getBoundingClientRect();
+        const pos = (e.clientX - rect.left) / rect.width;
+        currentTime = pos * duration;
+        progressFill.style.width = `${pos * 100}%`;
+        updateTimeDisplay();
+        
+        // Broadcast seek if host
+        if (isHost && roomManager) {
+          roomManager.broadcastSync('seek', currentTime);
+        }
+      });
+      
+      // Auto-hide controls
+      let controlTimeout;
+      playerContainer.addEventListener('mousemove', () => {
+        document.getElementById('player-controls').style.opacity = '1';
+        clearTimeout(controlTimeout);
+        controlTimeout = setTimeout(() => {
+          if (isPlaying) {
+            document.getElementById('player-controls').style.opacity = '0';
+          }
+        }, 2000);
+      });
+      
+      function simulateProgress() {
+        if (!isPlaying) return;
+        
+        currentTime += 1;
+        if (currentTime >= duration) {
+          currentTime = 0;
+          isPlaying = false;
+          
+          // Auto-advance to next episode
+          if (autoAdvance) {
+            currentEpisode++;
+            document.getElementById('episode-select').value = currentEpisode;
+            loadVideoPlayer(animeId, currentEpisode);
+            showToast('Playing next episode...');
+          }
+        }
+        
+        progressFill.style.width = `${(currentTime / duration) * 100}%`;
+        updateTimeDisplay();
+        
+        requestAnimationFrame(simulateProgress);
+      }
+      
+      function updateTimeDisplay() {
+        const currentMins = Math.floor(currentTime / 60);
+        const currentSecs = Math.floor(currentTime % 60);
+        const durationMins = Math.floor(duration / 60);
+        const durationSecs = Math.floor(duration % 60);
+        
+        timeDisplay.textContent = `${currentMins}:${currentSecs.toString().padStart(2, '0')} / ${durationMins}:${durationSecs.toString().padStart(2, '0')}`;
+      }
+    }
+    
+    function setupRoomButtons() {
+      const createRoomBtn = document.getElementById('create-room-btn');
+      const joinRoomBtn = document.getElementById('join-room-btn');
+      const copyInviteBtn = document.getElementById('copy-invite-btn');
+      const roomInfo = document.getElementById('room-info');
+      const roomIdDisplay = document.getElementById('room-id-display');
+      
+      // Create room
+      createRoomBtn.addEventListener('click', () => {
+        const newRoomId = createRoom(animeId, currentEpisode);
+        isHost = true;
+        
+        // Show room info
+        roomInfo.classList.remove('hidden');
+        roomIdDisplay.textContent = newRoomId;
+        createRoomBtn.classList.add('hidden');
+        joinRoomBtn.classList.remove('hidden');
+        
+        // Initialize room manager
+        roomManager = initRoomPage(newRoomId);
+        roomManager.setHost(true);
+        roomManager.setVideoElement(document.getElementById('player-wrapper'));
+        
+        // Update URL without reload
+        const newUrl = window.location.pathname + '?id=' + animeId + '&room=' + newRoomId;
+        window.history.pushState({ roomId: newRoomId }, '', newUrl);
+        
+        showToast('Room created! Share the link with friends', 'success');
+      });
+      
+      // Copy invite
+      copyInviteBtn.addEventListener('click', async () => {
+        const url = window.location.href;
+        const success = await copyToClipboard(url);
+        if (success) {
+          showToast('Invite link copied!', 'success');
+        }
+      });
+      
+      // Auto-advance toggle
+      const autoAdvanceSwitch = document.getElementById('auto-advance-switch');
+      autoAdvanceSwitch.addEventListener('click', () => {
+        autoAdvance = !autoAdvance;
+        autoAdvanceSwitch.classList.toggle('active', autoAdvance);
+      });
+    }
+    
+    function joinExistingRoom(roomId) {
+      isHost = false;
+      
+      const room = joinRoom(roomId);
+      if (!room) return;
+      
+      // Show room info
+      const roomInfo = document.getElementById('room-info');
+      const roomIdDisplay = document.getElementById('room-id-display');
+      roomInfo.classList.remove('hidden');
+      roomIdDisplay.textContent = roomId;
+      
+      // Initialize room manager as client
+      roomManager = initRoomPage(roomId);
+      roomManager.setHost(false);
+      roomManager.setVideoElement(document.getElementById('player-wrapper'));
+      
+      document.getElementById('create-room-btn').classList.add('hidden');
+      
+      showToast('Joined room! You\'re now synced with the host', 'success');
+    }
+    
+    // Start
+    init();
+  </script>
+</body>
+</html>

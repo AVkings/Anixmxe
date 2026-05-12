@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="See who's watching anime - AniSync">
+  <meta name="theme-color" content="#6366f1">
+  
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  
+  <!-- Preload fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <title>Who's Watching - AniSync</title>
+  
+  <style>
+    :root {
+      --primary: #6366f1;
+      --secondary: #ec4899;
+      --bg-dark: #0f0f13;
+    }
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f0f13 0%, #1a1a2e 100%);
+      color: #f1f5f9;
+      min-height: 100vh;
+    }
+    
+    .loading-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-dark);
+      z-index: 9999;
+    }
+    
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(99, 102, 241, 0.3);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+  
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body class="no-context-menu">
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-spinner"></div>
+  </div>
+  
+  <!-- Header -->
+  <header class="header">
+    <div class="container header-content">
+      <a href="index.html" class="logo">✨ AniSync</a>
+      
+      <nav>
+        <ul class="nav-links">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="dashboard.html" class="active">Who's Watching</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+  
+  <!-- Main Content -->
+  <main class="container page-transition">
+    <section class="hero mt-4 mb-4">
+      <h1 class="text-center mb-2">👀 Who's Watching</h1>
+      <p class="text-center" style="max-width: 600px; margin: 0 auto;">
+        Join active watch parties or see what others are streaming right now
+      </p>
+    </section>
+    
+    <!-- Stats -->
+    <div class="flex gap-4 mb-4" style="justify-content: center; flex-wrap: wrap;">
+      <div class="glass-card" style="padding: 1.5rem; text-align: center; min-width: 150px;">
+        <div style="font-size: 2rem; font-weight: 800; color: var(--primary);" id="active-rooms-count">0</div>
+        <div style="color: var(--text-secondary); font-size: 0.875rem;">Active Rooms</div>
+      </div>
+      <div class="glass-card" style="padding: 1.5rem; text-align: center; min-width: 150px;">
+        <div style="font-size: 2rem; font-weight: 800; color: var(--secondary);" id="total-viewers-count">0</div>
+        <div style="color: var(--text-secondary); font-size: 0.875rem;">Total Viewers</div>
+      </div>
+    </div>
+    
+    <!-- Refresh Button -->
+    <div class="flex items-center justify-between mb-3">
+      <h2 style="font-size: 1.5rem;">Active Rooms</h2>
+      <button class="glass-button ripple" id="refresh-btn">
+        🔄 Refresh
+      </button>
+    </div>
+    
+    <!-- Rooms Grid -->
+    <div id="rooms-grid" class="dashboard-grid">
+      <!-- Skeleton loaders -->
+      <div class="room-card">
+        <div class="skeleton skeleton-text" style="height: 24px; margin-bottom: 0.5rem;"></div>
+        <div class="skeleton skeleton-text short" style="margin-bottom: 1rem;"></div>
+        <div class="skeleton skeleton-text"></div>
+      </div>
+      <div class="room-card">
+        <div class="skeleton skeleton-text" style="height: 24px; margin-bottom: 0.5rem;"></div>
+        <div class="skeleton skeleton-text short" style="margin-bottom: 1rem;"></div>
+        <div class="skeleton skeleton-text"></div>
+      </div>
+      <div class="room-card">
+        <div class="skeleton skeleton-text" style="height: 24px; margin-bottom: 0.5rem;"></div>
+        <div class="skeleton skeleton-text short" style="margin-bottom: 1rem;"></div>
+        <div class="skeleton skeleton-text"></div>
+      </div>
+    </div>
+    
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden text-center mt-4 mb-4">
+      <div style="font-size: 4rem; margin-bottom: 1rem;">🎬</div>
+      <h3>No Active Rooms</h3>
+      <p style="color: var(--text-secondary); margin: 1rem 0;">Be the first to start a watch party!</p>
+      <a href="index.html" class="glass-button primary ripple">Browse Anime</a>
+    </div>
+  </main>
+  
+  <script>
+    window.addEventListener('load', () => {
+      const loadingScreen = document.getElementById('loading-screen');
+      if (loadingScreen) {
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => loadingScreen.remove(), 300);
+      }
+    });
+  </script>
+  
+  <script type="module">
+    import { getActiveRooms } from './js/app.js';
+    import { disableContextMenu } from './js/utils.js';
+    
+    // Mock room data for demo
+    const mockRooms = [
+      {
+        id: 'abc123',
+        animeId: '1',
+        animeTitle: 'Demon Slayer: Kimetsu no Yaiba',
+        episodeId: '5',
+        host: 'AnimeKing',
+        viewers: 12,
+        createdAt: Date.now() - 1000000
+      },
+      {
+        id: 'def456',
+        animeId: '2',
+        animeTitle: 'Attack on Titan',
+        episodeId: '10',
+        host: 'TitanFan',
+        viewers: 8,
+        createdAt: Date.now() - 2000000
+      },
+      {
+        id: 'ghi789',
+        animeId: '3',
+        animeTitle: 'Jujutsu Kaisen',
+        episodeId: '3',
+        host: 'CursedEnergy',
+        viewers: 15,
+        createdAt: Date.now() - 500000
+      },
+      {
+        id: 'jkl012',
+        animeId: '4',
+        animeTitle: 'One Piece',
+        episodeId: '100',
+        host: 'PirateKing',
+        viewers: 25,
+        createdAt: Date.now() - 3000000
+      }
+    ];
+    
+    function init() {
+      loadRooms();
+      
+      document.getElementById('refresh-btn')?.addEventListener('click', loadRooms);
+      
+      disableContextMenu();
+    }
+    
+    function loadRooms() {
+      // Get real rooms from localStorage
+      const realRooms = getActiveRooms();
+      
+      // Combine with mock rooms for demo
+      const allRooms = [...mockRooms, ...realRooms];
+      
+      updateStats(allRooms);
+      renderRooms(allRooms);
+    }
+    
+    function updateStats(rooms) {
+      const totalViewers = rooms.reduce((sum, room) => sum + (room.viewers || 0), 0);
+      
+      document.getElementById('active-rooms-count').textContent = rooms.length;
+      document.getElementById('total-viewers-count').textContent = totalViewers;
+    }
+    
+    function renderRooms(rooms) {
+      const grid = document.getElementById('rooms-grid');
+      const emptyState = document.getElementById('empty-state');
+      
+      if (!grid) return;
+      
+      if (rooms.length === 0) {
+        grid.classList.add('hidden');
+        emptyState?.classList.remove('hidden');
+        return;
+      }
+      
+      emptyState?.classList.add('hidden');
+      grid.classList.remove('hidden');
+      
+      grid.innerHTML = rooms.map(room => `
+        <div class="room-card page-transition" data-room-id="${room.id}">
+          <div class="room-card-header">
+            <h3 class="room-anime-title">${room.animeTitle}</h3>
+            <div class="room-viewers">
+              <span class="viewer-dot"></span>
+              ${room.viewers || 0} watching
+            </div>
+          </div>
+          <div class="room-host">
+            Hosted by <strong>${room.host || 'Anonymous'}</strong> • Episode ${room.episodeId}
+          </div>
+          <button class="room-join-btn ripple">
+            🎉 Join Room
+          </button>
+        </div>
+      `).join('');
+      
+      // Add click handlers
+      grid.querySelectorAll('.room-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+          if (e.target.classList.contains('room-join-btn')) {
+            const roomId = card.dataset.roomId;
+            joinRoom(roomId);
+          }
+        });
+      });
+    }
+    
+    function joinRoom(roomId) {
+      window.location.href = `watch.html?room=${roomId}`;
+    }
+    
+    // Auto-refresh every 30 seconds
+    setInterval(loadRooms, 30000);
+    
+    init();
+  </script>
+</body>
+</html>

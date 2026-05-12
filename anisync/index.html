@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AniSync - Watch anime together with friends in real-time">
+  <meta name="theme-color" content="#6366f1">
+  
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  
+  <!-- Preload fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <title>AniSync - Watch Anime Together</title>
+  
+  <style>
+    /* Inline critical CSS for faster initial load */
+    :root {
+      --primary: #6366f1;
+      --secondary: #ec4899;
+      --bg-dark: #0f0f13;
+      --text-light: #f1f5f9;
+    }
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f0f13 0%, #1a1a2e 100%);
+      color: var(--text-light);
+      min-height: 100vh;
+    }
+    
+    .loading-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-dark);
+      z-index: 9999;
+      transition: opacity 0.3s ease;
+    }
+    
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(99, 102, 241, 0.3);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+  
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body class="no-context-menu">
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-spinner"></div>
+  </div>
+  
+  <!-- Header -->
+  <header class="header">
+    <div class="container header-content">
+      <a href="index.html" class="logo">✨ AniSync</a>
+      
+      <nav>
+        <ul class="nav-links">
+          <li><a href="index.html" class="active">Home</a></li>
+          <li><a href="dashboard.html">Who's Watching</a></li>
+          <li><a href="#" id="create-room-nav">Create Room</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+  
+  <!-- Main Content -->
+  <main class="container page-transition">
+    <!-- Hero Section -->
+    <section class="hero mt-4 mb-4">
+      <h1 class="text-center mb-2">Watch Anime Together</h1>
+      <p class="text-center" style="max-width: 600px; margin: 0 auto;">
+        Stream your favorite anime with friends in real-time. Sync playback, chat, and react together!
+      </p>
+    </section>
+    
+    <!-- Search & Filters -->
+    <div class="search-bar">
+      <input 
+        type="text" 
+        id="search-input" 
+        class="search-input" 
+        placeholder="Search anime... (Press / to focus)"
+      >
+      
+      <div id="filter-chips" class="filter-chips">
+        <span class="filter-chip" data-genre="Action">Action</span>
+        <span class="filter-chip" data-genre="Adventure">Adventure</span>
+        <span class="filter-chip" data-genre="Comedy">Comedy</span>
+        <span class="filter-chip" data-genre="Drama">Drama</span>
+        <span class="filter-chip" data-genre="Fantasy">Fantasy</span>
+        <span class="filter-chip" data-genre="Horror">Horror</span>
+        <span class="filter-chip" data-genre="Romance">Romance</span>
+        <span class="filter-chip" data-genre="Slice of Life">Slice of Life</span>
+      </div>
+    </div>
+    
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="hidden text-center mt-4">
+      <div class="loading-spinner" style="margin: 0 auto;"></div>
+      <p class="mt-2">Loading anime...</p>
+    </div>
+    
+    <!-- Anime Grid -->
+    <div id="anime-grid" class="anime-grid">
+      <!-- Skeleton loaders -->
+      <div class="anime-card">
+        <div class="skeleton skeleton-poster"></div>
+        <div class="anime-info">
+          <div class="skeleton skeleton-text"></div>
+          <div class="skeleton skeleton-text short"></div>
+        </div>
+      </div>
+      <div class="anime-card">
+        <div class="skeleton skeleton-poster"></div>
+        <div class="anime-info">
+          <div class="skeleton skeleton-text"></div>
+          <div class="skeleton skeleton-text short"></div>
+        </div>
+      </div>
+      <div class="anime-card">
+        <div class="skeleton skeleton-poster"></div>
+        <div class="anime-info">
+          <div class="skeleton skeleton-text"></div>
+          <div class="skeleton skeleton-text short"></div>
+        </div>
+      </div>
+      <div class="anime-card">
+        <div class="skeleton skeleton-poster"></div>
+        <div class="anime-info">
+          <div class="skeleton skeleton-text"></div>
+          <div class="skeleton skeleton-text short"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  
+  <!-- Footer -->
+  <footer class="mt-4 mb-4 text-center" style="color: var(--text-secondary); font-size: 0.875rem;">
+    <p>Made with ❤️ for anime fans everywhere</p>
+    <p class="mt-1">Press <kbd style="background: var(--surface); padding: 2px 6px; border-radius: 4px;">/</kbd> to search • <kbd style="background: var(--surface); padding: 2px 6px; border-radius: 4px;">F12</kbd> disabled</p>
+  </footer>
+  
+  <!-- Service Worker Registration -->
+  <script>
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('SW registered:', reg.scope))
+          .catch(err => console.log('SW registration failed:', err));
+      });
+    }
+  </script>
+  
+  <!-- Main App Script -->
+  <script type="module">
+    import app from './js/app.js';
+    import { disableContextMenu } from './js/utils.js';
+    
+    // Remove loading screen when ready
+    window.addEventListener('load', () => {
+      const loadingScreen = document.getElementById('loading-screen');
+      if (loadingScreen) {
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => loadingScreen.remove(), 300);
+      }
+    });
+    
+    // Initialize app
+    app.init();
+    
+    // Disable context menu (basic obfuscation)
+    disableContextMenu();
+    
+    // Create room button handler
+    document.getElementById('create-room-nav')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      alert('Select an anime first, then click "Create Room" on the watch page!');
+    });
+  </script>
+</body>
+</html>
