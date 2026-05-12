@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AniSync - Manga Style Anime Streaming</title>
+  
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#000000">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  
+  <!-- Google Fonts - Comic/Manga Style -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&family=M+PLUS+1p:wght@400;700;900&display=swap" rel="stylesheet">
+  
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+  <!-- Header - Manga Panel Style -->
+  <header class="manga-header">
+    <div class="header-panel">
+      <div class="logo">
+        <h1>AniSync<span class="sparkle">✨</span></h1>
+        <p class="tagline">Read Anime Like Manga!</p>
+      </div>
+      <nav class="main-nav">
+        <a href="index.html" class="nav-item active">📖 Home</a>
+        <a href="dashboard.html" class="nav-item">👥 Who's Reading</a>
+        <button id="create-room-btn" class="nav-item btn-accent">🎬 Create Room</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero Section - 3-Panel Manga Layout -->
+  <section class="hero-section">
+    <div class="manga-panels-hero" id="hero-panels">
+      <!-- Dynamically loaded featured anime -->
+      <div class="panel skeleton"></div>
+      <div class="panel skeleton"></div>
+      <div class="panel skeleton"></div>
+    </div>
+  </section>
+
+  <!-- Search & Filters - Manga Volume Shelf -->
+  <section class="search-section">
+    <div class="search-container manga-panel">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="🔍 Search anime..." class="manga-input">
+        <button id="search-btn" class="btn-manga">SEARCH!</button>
+      </div>
+      <div class="genre-filters" id="genre-filters">
+        <!-- Dynamically loaded genres -->
+      </div>
+    </div>
+  </section>
+
+  <!-- Anime Grid - Comic Book Covers -->
+  <main class="anime-grid-section">
+    <div class="section-header manga-panel">
+      <h2>📚 Latest Chapters</h2>
+      <div class="loading-indicator" id="loading-indicator">
+        <span class="loading-text">Loading...</span>
+        <div class="manga-loader"></div>
+      </div>
+    </div>
+    
+    <div class="anime-grid" id="anime-grid">
+      <!-- Dynamically loaded anime cards -->
+    </div>
+    
+    <div class="pagination" id="pagination">
+      <button id="prev-page" class="btn-manga" disabled>← PREV</button>
+      <span id="page-info">Page 1</span>
+      <button id="next-page" class="btn-manga">NEXT →</button>
+    </div>
+  </main>
+
+  <!-- Toast Notifications - Speech Bubble Style -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Footer -->
+  <footer class="manga-footer">
+    <p>Made with ❤️ for manga lovers</p>
+    <p class="api-note">Data by Jikan API • Streams by Consumet</p>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+  
+  <script>
+    // Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => console.log('SW registered:', reg.scope))
+        .catch(err => console.log('SW registration failed:', err));
+    }
+  </script>
+</body>
+</html>
