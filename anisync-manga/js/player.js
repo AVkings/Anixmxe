@@ -205,62 +205,35 @@ class AnimePlayer {
     try {
       console.log('🔍 Trying to fetch from Anikoto with ID:', animeId);
       
-      // First check if animeId is numeric (MAL ID from Jikan)
+      // First check if animeId is numeric (could be Anikoto ID or MAL ID)
       if (/^\d+$/.test(animeId)) {
-        // It's a MAL ID - need to find the corresponding Anikoto series
-        console.log('ℹ️ Numeric ID detected, treating as MAL ID:', animeId);
+        const numId = parseInt(animeId);
         
-        // Search recent anime to find match by MAL ID
-        const recentResponse = await fetch('https://anikotoapi.site/recent-anime?page=1&per_page=100');
-        const recentData = await recentResponse.json();
+        // Try as Anikoto series ID first (using /series/{id})
+        console.log('ℹ️ Numeric ID detected, trying as Anikoto series ID:', numId);
+        const seriesUrl = `https://anikotoapi.site/series/${numId}`;
         
-        const found = recentData.data?.find(a => a.mal_id === parseInt(animeId));
-        if (found) {
-          console.log('✅ Found match in recent anime:', found.title, 'Anikoto ID:', found.id);
-          // Use the found series ID to get full details
-          const seriesUrl = `https://anikotoapi.site/series/${found.id}`;
+        try {
           return await this.fetchSeriesFromUrl(seriesUrl, cacheKey);
+        } catch (seriesError) {
+          console.log('⚠️ Not found as series ID, trying as MAL ID...');
+          
+          // Not found as series ID - search recent anime to find match by MAL ID
+          const recentResponse = await fetch('https://anikotoapi.site/recent-anime?page=1&per_page=100');
+          const recentData = await recentResponse.json();
+          
+          const found = recentData.data?.find(a => a.mal_id === numId);
+          if (found) {
+            console.log('✅ Found match by MAL ID:', found.title, 'Anikoto ID:', found.id);
+            const newSeriesUrl = `https://anikotoapi.site/series/${found.id}`;
+            return await this.fetchSeriesFromUrl(newSeriesUrl, cacheKey);
+          }
+          
+          throw new Error(`Anime with ID ${animeId} not found`);
         }
-        
-        // Not found in recent - search by title using Jikan
-        console.log('⚠️ Not found in recent anime, trying Jikan lookup...');
-        const jikanResponse = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/full`);
-        const jikanData = await jikanResponse.json();
-        
-        if (!jikanData.data) {
-          throw new Error('Anime not found in MyAnimeList database');
-        }
-        
-        const title = jikanData.data.title_english || jikanData.data.title;
-        console.log('📺 Found anime title from Jikan:', title);
-        
-        // Search for this title in Anikoto recent anime
-        const searchResponse = await fetch('https://anikotoapi.site/recent-anime?page=1&per_page=100');
-        const searchData = await searchResponse.json();
-        
-        // Try exact match first, then partial
-        let matched = searchData.data?.find(a => 
-          a.title.toLowerCase() === title.toLowerCase()
-        );
-        
-        if (!matched) {
-          // Try partial match on first word
-          const firstWord = title.split(' ')[0].toLowerCase();
-          matched = searchData.data?.find(a => 
-            a.title.toLowerCase().includes(firstWord)
-          );
-        }
-        
-        if (matched) {
-          console.log('✅ Matched by title:', matched.title, 'Anikoto ID:', matched.id);
-          const seriesUrl = `https://anikotoapi.site/series/${matched.id}`;
-          return await this.fetchSeriesFromUrl(seriesUrl, cacheKey);
-        }
-        
-        throw new Error(`Anime "${title}" not found in Anikoto catalog. Try searching on the homepage.`);
       }
       
-      // Assume it's an Anikoto series ID
+      // Assume it's an Anikoto series ID (slug format like "liar-game-kcq5v")
       const seriesUrl = `https://anikotoapi.site/series/${animeId}`;
       return await this.fetchSeriesFromUrl(seriesUrl, cacheKey);
       
@@ -335,23 +308,19 @@ class AnimePlayer {
       throw new Error('No episode embed ID available');
     }
 
-    // Construct MegaPlay URL
+    // Check if embed_url is already provided by Anikoto
+    if (episode.embed_url && episode.embed_url[language]) {
+      console.log('✅ Using pre-built embed URL from Anikoto');
+      return episode.embed_url[language];
+    }
+    
+    // Construct MegaPlay URL manually
     // Format: https://megaplay.buzz/stream/s-2/{episode_embed_id}/{language}
     const streamUrl = `https://megaplay.buzz/stream/s-2/${embedId}/${language}`;
     
     console.log('🎬 MegaPlay Stream URL:', streamUrl);
     
-    // Verify the URL is accessible (optional check)
-    try {
-      // We can't directly fetch due to CORS, but we can check if the format is valid
-      if (!streamUrl.includes('megaplay.buzz')) {
-        throw new Error('Invalid stream URL format');
-      }
-      return streamUrl;
-    } catch (error) {
-      console.error('❌ Stream URL validation failed:', error);
-      return null;
-    }
+    return streamUrl;
   }
 
   /**
@@ -363,29 +332,35 @@ class AnimePlayer {
     // Clear previous player
     container.innerHTML = '';
 
-    // Create iframe with proper attributes for security and functionality
-    const iframe = document.createElement('iframe');
-    iframe.src = streamUrl;
-    iframe.width = '100%';
-    iframe.height = '100%';
-    iframe.frameBorder = '0';
-    iframe.scrolling = 'no';
-    iframe.allowFullscreen = true;
-    iframe.allow = 'autoplay; fullscreen; picture-in-picture';
-    iframe.referrerPolicy = 'no-referrer';
-    iframe.style.border = 'none';
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
+    // Create wrapper div for obfuscation
+    const wrapper = document.createElement('div');
+    wrapper.id = 'secure-player-wrapper';
+    wrapper.style.cssText = 'width:100%;height:100%;';
     
-    // Add sandbox attributes for security (but allow necessary features)
-    iframe.sandbox = 'allow-same-origin allow-scripts allow-popups allow-forms allow-pointer-lock allow-top-navigation-by-user-activation';
-
-    container.appendChild(iframe);
+    container.appendChild(wrapper);
     
-    console.log('✅ Player embedded successfully');
-    
-    // Store reference for controls
-    this.player = iframe;
+    // Use setTimeout to obfuscate URL setting
+    setTimeout(() => {
+      // Create iframe with proper attributes
+      const iframe = document.createElement('iframe');
+      iframe.width = '100%';
+      iframe.height = '100%';
+      iframe.frameBorder = '0';
+      iframe.scrolling = 'no';
+      iframe.allowFullscreen = true;
+      iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+      iframe.referrerPolicy = 'no-referrer';
+      iframe.style.cssText = 'width:100%;height:100%;border:none;';
+      iframe.sandbox = 'allow-same-origin allow-scripts allow-popups allow-forms allow-pointer-lock allow-top-navigation-by-user-activation';
+      
+      // Set src dynamically (obfuscation technique)
+      iframe.src = streamUrl;
+      
+      wrapper.appendChild(iframe);
+      this.player = iframe;
+      
+      console.log('✅ Player embedded successfully');
+    }, 100);
   }
 
   /**

@@ -339,5 +339,11 @@
   <script src="js/utils.js"></script>
   <script src="js/api.js"></script>
   <script src="js/player.js"></script>
+  <script>
+    // Initialize player when DOM is ready
+    document.addEventListener('DOMContentLoaded', () => {
+      window.player = new AnimePlayer();
+    });
+  </script>
 </body>
 </html>
