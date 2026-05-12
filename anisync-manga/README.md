@@ -1,42 +1,23 @@
-# 📚 AniSync - Manga-Style Anime Streaming Platform
+# ✨ AniSync - Manga-Styled Anime Streaming Platform
 
-A beautiful, manga/comic-styled anime streaming platform with watch-together rooms, real-time chat, and stunning UI.
+**A fully functional, no-login-required anime streaming platform with watch-together rooms, real-time chat, and a stunning manga/comic aesthetic.**
 
-![AniSync Banner](https://img.shields.io/badge/AniSync-Manga%20Streaming-ff0040?style=for-the-badge)
+🔗 **Live Demo**: Open `index.html` in your browser (via local server)
 
-## ✨ Features
-
-### Core Features
-- 📖 **Anime Library** - Browse 50+ anime from Jikan API (MyAnimeList)
-- 🔍 **Search & Filter** - Real-time search + genre filtering
-- 📺 **Video Player** - Stream episodes via Consumet API
-- 🎬 **Watch-Together Rooms** - Create rooms, share links, sync playback
-- 💬 **Real-Time Chat** - Cross-tab communication with speech bubbles
-- 👥 **Dashboard** - See who's watching in active rooms
-- 📱 **PWA Ready** - Install on mobile, offline support
-
-### Manga/Comic UI
-- 🎨 Thick black borders & comic book styling
-- 📰 Halftone patterns & paper texture backgrounds
-- ✨ Speed lines, page turn animations
-- 💥 Action text effects ("POW!", "BOOM!")
-- 📊 Comic font typography (Bangers, Comic Neue)
+---
 
 ## 🚀 Quick Start
 
-### Option 1: Python Server
+### Option 1: Python Server (Recommended)
 ```bash
 cd anisync-manga
-python -m http.server 8080
-# Open http://localhost:8080
+python3 -m http.server 8080
 ```
 
 ### Option 2: Node.js Server
 ```bash
 cd anisync-manga
 npx serve .
-# or
-npx http-server -p 8080
 ```
 
 ### Option 3: VS Code Live Server
@@ -44,213 +25,274 @@ npx http-server -p 8080
 2. Right-click `index.html`
 3. Select "Open with Live Server"
 
-## 📁 Project Structure
+**Then visit**: `http://localhost:8080`
+
+> ⚠️ **Important**: Do NOT open HTML files directly (file:// protocol). You must use a web server for the API calls and PWA features to work.
+
+---
+
+## 📺 Video Streaming - How It Works
+
+AniSync uses the **Anikoto API + MegaPlay** for video streaming:
+
+### API Flow:
+1. **Browse Anime**: Fetches from Jikan API (MyAnimeList database)
+2. **Get Episodes**: Calls `https://anikotoapi.site/series/{id}` to get episode list
+3. **Stream Video**: Constructs MegaPlay URL: `https://megaplay.buzz/stream/s-2/{episode_embed_id}/{language}`
+4. **Embed Player**: Injects iframe with postMessage event handling for sync
+
+### Supported Languages:
+- **Sub** (Japanese with subtitles) - Primary
+- **Dub** (English dubbed) - Fallback
+
+### API Endpoints Used:
+
+| Purpose | Endpoint |
+|---------|----------|
+| Browse Anime | `https://api.jikan.moe/v4/top/anime` |
+| Search Anime | `https://api.jikan.moe/v4/anime?q={query}` |
+| Get Episodes | `https://anikotoapi.site/series/{id}` |
+| Stream Video | `https://megaplay.buzz/stream/s-2/{embed_id}/{sub|dub}` |
+
+---
+
+## 🎯 Features
+
+### ✅ Core Features
+- **Anime Library Browser** - 50+ anime with search & genre filters
+- **Video Player** - Embedded MegaPlay player with custom controls
+- **Episode Selector** - Dropdown to switch episodes
+- **Auto-Next Episode** - Toggle for automatic progression
+- **Watch-Together Rooms** - Create/join rooms with unique URLs
+- **Real-Time Chat** - Cross-tab communication via localStorage
+- **Emoji Reactions** - Floating emoji animations
+- **Playback Sync** - Host controls sync to all clients
+- **Who's Watching Dashboard** - See active rooms
+
+### 🎨 Manga/Comic Aesthetic
+- Thick black borders (4px solid #000)
+- Hard shadows (8px 8px 0px #000)
+- Halftone pattern overlay
+- Comic fonts (Bangers, Comic Neue, M PLUS 1p)
+- Page turn animations
+- Speed lines on hover
+- Speech bubble notifications
+
+### 📱 PWA Ready
+- Installable on mobile devices
+- Offline support for static assets
+- Responsive design (mobile-first)
+
+---
+
+## 🗂️ Project Structure
 
 ```
 anisync-manga/
-├── index.html          # Home page with anime grid
-├── watch.html          # Video player + chat
+├── index.html          # Homepage with anime grid
+├── watch.html          # Video player page
 ├── dashboard.html      # Active rooms view
 ├── manifest.json       # PWA configuration
 ├── sw.js               # Service worker
 ├── css/
-│   ├── main.css        # Base styles (687 lines)
-│   ├── components.css  # Reusable components (424 lines)
-│   └── animations.css  # Animations (438 lines)
+│   ├── main.css        # Base styles & variables
+│   ├── components.css  # Reusable components
+│   └── animations.css  # Animations & effects
 ├── js/
-│   ├── api.js          # Jikan + Consumet API integration
+│   ├── api.js          # Jikan + Anikoto API integration
 │   ├── app.js          # Homepage logic
-│   ├── player.js       # Video player + room sync
-│   ├── dashboard.js    # Active rooms display
+│   ├── player.js       # Video player (MegaPlay integration)
+│   ├── dashboard.js    # Active rooms logic
 │   └── utils.js        # Utility functions
-└── assets/
-    ├── icons/          # PWA icons (generate these)
-    └── patterns/       # Halftone SVG patterns
+└── README.md           # This file
 ```
 
-## 🔧 APIs Used
+---
 
-### Jikan API (Primary - Anime Data)
-- **Base URL**: `https://api.jikan.moe/v4`
-- **No authentication required**
-- **Endpoints**:
-  - `/top/anime` - Get top rated anime
-  - `/anime?q={query}` - Search anime
-  - `/anime/{id}/full` - Get anime details
-  - `/genres/anime` - Get available genres
+## 🔧 Configuration
 
-### Consumet API (Streaming)
-- **Base URL**: `https://api.consumet.org`
-- **Free, open-source streaming API**
-- **Endpoints**:
-  - `/anime/gogoanime/{query}` - Search for streams
-  - `/anime/gogoanime/watch/{episodeId}` - Get stream URL
-
-## 🎨 Design System
-
-### Colors
+### Change Accent Color
+Edit `css/main.css`:
 ```css
---color-black: #000000
---color-white: #ffffff
---color-paper: #f5f5f0
---color-accent: #ff0040 (Vibrant Red)
---color-highlight: #ffd700 (Gold)
+:root {
+  --color-accent: #ff0040; /* Change this */
+}
 ```
 
-### Fonts
-- **Headers**: Bangers (comic book style)
-- **Body**: Comic Neue (readable comic font)
-- **Japanese**: M PLUS 1p (clean sans-serif)
-
-### Borders & Shadows
-- **Thick Border**: 4px solid black
-- **Hard Shadow**: 8px 8px 0px black
-- **Hover Shadow**: 10px 10px 0px black
-
-## 📱 PWA Installation
-
-### Generate Icons
-Use [PWA Icon Generator](https://realfavicongenerator.net/) to create icons:
-```
-assets/icons/icon-72.png
-assets/icons/icon-96.png
-assets/icons/icon-128.png
-assets/icons/icon-144.png
-assets/icons/icon-152.png
-assets/icons/icon-192.png
-assets/icons/icon-384.png
-assets/icons/icon-512.png
-```
-
-### Install on Mobile
-1. Open site in Chrome/Safari
-2. Tap "Add to Home Screen"
-3. Launch from home screen!
-
-## 🎯 How to Use
-
-### Browse Anime
-1. Open `index.html`
-2. Scroll through the manga-style grid
-3. Click any card to watch
-
-### Watch Together
-1. Click an anime card
-2. Click "Create Watch Room"
-3. Copy the URL and share with friends
-4. Everyone joins → Host controls playback!
-
-### Join Existing Room
-1. Go to "Who's Reading" dashboard
-2. Click any active room
-3. Join and start watching together!
-
-## 🔐 Security Notes
-
-### Current Implementation
-- Basic right-click/F12 deterrent
-- Sandbox attributes on iframes
-- Input sanitization for chat
-
-### Production Recommendations
-1. **Backend Proxy**: Set up a server to proxy API requests
-2. **Rate Limiting**: Implement request throttling
-3. **CORS**: Configure proper CORS headers
-4. **HTTPS**: Always use HTTPS in production
-
-### Example Backend Proxy (Node.js)
+### Adjust Cache Duration
+Edit `js/player.js`:
 ```javascript
-// server.js
-const express = require('express');
-const fetch = require('node-fetch');
-const app = express();
-
-app.get('/api/anime/top', async (req, res) => {
-  const response = await fetch('https://api.jikan.moe/v4/top/anime?limit=50');
-  const data = await response.json();
-  res.json(data);
-});
-
-app.listen(3000);
+// Change from 5 minutes to desired duration
+if (Date.now() - timestamp < 5 * 60 * 1000) {
 ```
+
+---
 
 ## 🐛 Troubleshooting
 
-### "Failed to load anime list"
-- Check internet connection
-- Jikan API may be rate limiting (wait 1 minute)
-- API is cached for 5 minutes - clear cache if needed
+### Video Not Playing?
 
-### "Video unavailable" or Not Playing
-The video player now uses **multi-source fallback**:
-1. **Consumet API** (Primary) - Searches Gogoanime streams
-2. **Gogoanime Direct** - Scrapes via CORS proxy
-3. **YouTube Official** - Fallback to official channels
+1. **Check Console Logs** - Press F12 → Console tab
+   - Look for errors like "API returned 404" or "No episode embed ID"
+   
+2. **Try Different Episode** - Some episodes may not be available
+   
+3. **Switch Sub/Dub** - Auto-fallback is built-in
+   
+4. **Clear Cache** - Run in console:
+   ```javascript
+   localStorage.clear();
+   location.reload();
+   ```
 
-If video doesn't play:
-- Check browser console (F12) for detailed error messages
-- Try a different episode (some episodes may be unavailable)
-- Try a different anime (licensing varies by title)
-- Click "Watch on YouTube" button for official sources
-- Popular anime (One Piece, Naruto, etc.) have YouTube embeds
+5. **Check Internet** - APIs require connection
 
-**Debug Mode**: Open DevTools Console to see which sources are being tried and why they fail.
+### CORS Errors?
 
-### CORS Errors
-- **Must use a web server** (not file:// protocol)
-- Use Python: `python -m http.server 8080`
-- Or Node.js: `npx serve .`
+Make sure you're using a **web server**, not opening files directly:
+- ❌ `file:///C:/Users/.../index.html`
+- ✅ `http://localhost:8080`
 
-### PWA Not Installing
-- Must be served over HTTPS (or localhost)
-- Check manifest.json is valid
-- Ensure service worker is registered
+### API Rate Limited?
 
-### HLS Video Not Playing
-- HLS.js is loaded automatically for .m3u8 streams
-- Safari has native HLS support
-- If issues persist, try a different browser (Chrome recommended)
+Anikoto/Jikan have rate limits. Wait a few minutes or:
+- Use cached data (automatically cached for 5 min)
+- Try a different anime
 
-## 📊 Performance
+### Room Sync Not Working?
 
-### Optimizations Implemented
-- ✅ Lazy loading images
-- ✅ API response caching (5 min)
-- ✅ Debounced search (500ms)
-- ✅ Skeleton loading states
-- ✅ CSS containment
-- ✅ Reduced motion support
+- Open rooms in **different tabs** of the same browser
+- localStorage sync only works within same browser
+- For cross-device sync, you'd need a WebSocket server
 
-### Lighthouse Targets
-- Performance: 90+
-- Accessibility: 90+
-- Best Practices: 90+
-- SEO: 90+
-- PWA: 100
+---
+
+## 🔐 Security Notes
+
+### Current Implementation:
+- Basic iframe sandboxing
+- Origin verification for postMessage events
+- No user authentication (by design)
+
+### For Production:
+1. **Backend Proxy** - Route API calls through your server
+2. **Rate Limiting** - Prevent abuse
+3. **HTTPS** - Required for production
+4. **CORS Headers** - Configure properly
+
+Example Cloudflare Worker proxy:
+```javascript
+addEventListener('fetch', event => {
+  event.respondWith(handleRequest(event.request));
+});
+
+async function handleRequest(request) {
+  const url = new URL(request.url);
+  const apiUrl = url.pathname.replace('/api/', 'https://anikotoapi.site/');
+  
+  const response = await fetch(apiUrl);
+  return new Response(response.body, {
+    headers: {
+      'Access-Control-Allow-Origin': '*'
+    }
+  });
+}
+```
+
+---
+
+## 📊 API Limits
+
+| API | Limit | Notes |
+|-----|-------|-------|
+| Jikan | 3 requests/sec | No API key needed |
+| Anikoto | Unknown | Free tier |
+| MegaPlay | Unknown | Embed-only access |
+
+---
+
+## 🎨 Customization
+
+### Add More Fonts
+Edit `watch.html` / `index.html`:
+```html
+<link href="https://fonts.googleapis.com/css2?family=YOUR_FONT" rel="stylesheet">
+```
+
+### Modify Manga Panel Style
+Edit `css/components.css`:
+```css
+.manga-panel {
+  border: 4px solid #000;
+  box-shadow: 8px 8px 0px #000;
+  /* Adjust values */
+}
+```
+
+### Add New Genres
+Edit `js/app.js`:
+```javascript
+const GENRES = [
+  { id: 1, name: 'Action', icon: '⚔️' },
+  { id: 2, name: 'Adventure', icon: '🗡️' },
+  // Add more...
+];
+```
+
+---
+
+## 🚀 Deployment
+
+### Netlify
+1. Drag & drop `anisync-manga` folder to netlify.com/drop
+2. Done!
+
+### Vercel
+```bash
+npm i -g vercel
+vercel deploy
+```
+
+### GitHub Pages
+1. Push to GitHub repo
+2. Settings → Pages → Select branch
+3. Visit `yourusername.github.io/repo-name`
+
+---
+
+## 📝 Legal Disclaimer
+
+This project is for **educational purposes only**. 
+
+- We don't host any video content
+- All streams are embedded from third-party sources
+- Respect copyright laws in your country
+- Remove if requested by rights holders
+
+---
 
 ## 🤝 Contributing
 
 Contributions welcome! Areas for improvement:
-- [ ] WebSocket backend for real rooms
-- [ ] User authentication
-- [ ] Custom avatar system
-- [ ] Episode bookmarking
-- [ ] Watch history
+- [ ] WebSocket backend for cross-device room sync
+- [ ] User preferences (theme, quality)
+- [ ] Download for offline viewing
+- [ ] Better error handling
 - [ ] More video sources
-
-## 📄 License
-
-MIT License - Feel free to use for personal projects!
-
-## 🙏 Credits
-
-- **Jikan API** - MyAnimeList unofficial API
-- **Consumet** - Free streaming API
-- **Google Fonts** - Comic fonts
-- **You!** - For reading this far! 😄
 
 ---
 
-**Made with ❤️ and 📚 for manga lovers everywhere!**
+## 📞 Support
 
-*AniSync - Read Anime Like Manga!* ✨
+Found a bug? Have questions?
+
+1. Check console logs (F12)
+2. Clear localStorage
+3. Try different anime/episode
+4. Report issues with details
+
+---
+
+**Made with ❤️ for manga lovers** 📚✨
+
+*AniSync - Read anime like manga!*
