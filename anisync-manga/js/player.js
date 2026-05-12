@@ -119,7 +119,6 @@ class AnimePlayer {
    * Multi-tier fallback system
    */
   async loadVideo(animeId, episodeNum = 1) {
-    const debugInfo = document.getElementById('debug-info');
     const playerWrapper = document.getElementById('player-wrapper');
     const playerLoading = document.getElementById('player-loading');
     
@@ -127,14 +126,9 @@ class AnimePlayer {
     
     // Show loading state
     if (playerLoading) playerLoading.style.display = 'flex';
-    if (debugInfo) {
-      debugInfo.style.display = 'block';
-      this.showLoading(debugInfo);
-    }
 
     try {
       // Step 1: Get anime details and episode list from Anikoto API
-      if (debugInfo) debugInfo.innerHTML = '🔄 Fetching anime details from Anikoto...';
       console.log('📡 Fetching from Anikoto API:', `https://anikotoapi.site/series/${animeId}`);
       
       const seriesData = await this.fetchAnikotoSeries(animeId);
@@ -154,17 +148,15 @@ class AnimePlayer {
       }
 
       this.currentEpisode = episode;
-      if (debugInfo) debugInfo.innerHTML = `📺 Loading Episode ${episode.number}: ${episode.title || 'Episode ' + episode.number}...`;
       console.log('📺 Selected episode:', episode);
 
       // Step 2: Get embed URL from MegaPlay
-      if (debugInfo) debugInfo.innerHTML += '<br>🔗 Getting stream URL from MegaPlay...';
       const streamUrl = await this.getMegaPlayStream(episode, 'sub');
       
       let finalStreamUrl = streamUrl;
       if (!streamUrl) {
         // Try dub version
-        if (debugInfo) debugInfo.innerHTML = '⚠️ Sub not available, trying dub...';
+        console.log('⚠️ Sub not available, trying dub...');
         const dubStream = await this.getMegaPlayStream(episode, 'dub');
         if (dubStream) {
           finalStreamUrl = dubStream;
@@ -175,7 +167,6 @@ class AnimePlayer {
       }
 
       console.log('✅ Stream URL:', finalStreamUrl);
-      if (debugInfo) debugInfo.innerHTML = `✅ Stream loaded! Playing Episode ${episode.number}<br><small>${finalStreamUrl}</small>`;
       
       // Hide loading spinner
       if (playerLoading) playerLoading.style.display = 'none';
@@ -186,21 +177,17 @@ class AnimePlayer {
       // Update UI
       this.updateEpisodeSelector(seriesData.episodes, episodeNum);
       this.updateAnimeInfo(seriesData);
-      
-      // Hide debug info after successful load
-      setTimeout(() => {
-        if (debugInfo) debugInfo.style.display = 'none';
-      }, 5000);
 
     } catch (error) {
       console.error('❌ Video load error:', error);
       if (playerLoading) playerLoading.style.display = 'none';
-      this.showVideoError(debugInfo, error.message, animeId, episodeNum);
+      this.showVideoError(error.message, animeId, episodeNum);
     }
   }
 
   /**
    * Fetch anime series data from Anikoto API
+   * Handles both Anikoto IDs and MAL IDs
    */
   async fetchAnikotoSeries(animeId) {
     const cacheKey = `anisync_series_${animeId}`;
@@ -218,85 +205,102 @@ class AnimePlayer {
     try {
       console.log('🔍 Trying to fetch from Anikoto with ID:', animeId);
       
-      // First check if animeId is numeric (MAL ID)
-      let seriesUrl;
+      // First check if animeId is numeric (MAL ID from Jikan)
       if (/^\d+$/.test(animeId)) {
         // It's a MAL ID - need to find the corresponding Anikoto series
-        console.log('ℹ️ Numeric ID detected, treating as MAL ID');
-        // Try fetching recent anime and finding match
+        console.log('ℹ️ Numeric ID detected, treating as MAL ID:', animeId);
+        
+        // Search recent anime to find match by MAL ID
         const recentResponse = await fetch('https://anikotoapi.site/recent-anime?page=1&per_page=100');
         const recentData = await recentResponse.json();
         
         const found = recentData.data?.find(a => a.mal_id === parseInt(animeId));
         if (found) {
-          console.log('✅ Found match in recent anime:', found.title);
-          // Use the found series ID
-          seriesUrl = `https://anikotoapi.site/series/${found.id}`;
-        } else {
-          // Try searching by title using Jikan first
-          console.log('⚠️ Not found in recent anime, trying Jikan lookup...');
-          const jikanResponse = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/full`);
-          const jikanData = await jikanResponse.json();
-          
-          if (jikanData.data) {
-            const title = jikanData.data.title_english || jikanData.data.title;
-            console.log('📺 Found anime title from Jikan:', title);
-            
-            // Search for this title in Anikoto
-            const searchResponse = await fetch('https://anikotoapi.site/recent-anime?page=1&per_page=100');
-            const searchData = await searchResponse.json();
-            
-            const matched = searchData.data?.find(a => 
-              a.title.toLowerCase().includes(title.split(' ')[0].toLowerCase())
-            );
-            
-            if (matched) {
-              console.log('✅ Matched by title:', matched.title);
-              seriesUrl = `https://anikotoapi.site/series/${matched.id}`;
-            } else {
-              throw new Error(`Anime not found in Anikoto catalog. Try searching for "${title}" on the homepage.`);
-            }
-          } else {
-            throw new Error('Anime not found in MyAnimeList database');
-          }
+          console.log('✅ Found match in recent anime:', found.title, 'Anikoto ID:', found.id);
+          // Use the found series ID to get full details
+          const seriesUrl = `https://anikotoapi.site/series/${found.id}`;
+          return await this.fetchSeriesFromUrl(seriesUrl, cacheKey);
         }
-      } else {
-        // Assume it's an Anikoto series ID (numeric but as string, or slug)
-        seriesUrl = `https://anikotoapi.site/series/${animeId}`;
+        
+        // Not found in recent - search by title using Jikan
+        console.log('⚠️ Not found in recent anime, trying Jikan lookup...');
+        const jikanResponse = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/full`);
+        const jikanData = await jikanResponse.json();
+        
+        if (!jikanData.data) {
+          throw new Error('Anime not found in MyAnimeList database');
+        }
+        
+        const title = jikanData.data.title_english || jikanData.data.title;
+        console.log('📺 Found anime title from Jikan:', title);
+        
+        // Search for this title in Anikoto recent anime
+        const searchResponse = await fetch('https://anikotoapi.site/recent-anime?page=1&per_page=100');
+        const searchData = await searchResponse.json();
+        
+        // Try exact match first, then partial
+        let matched = searchData.data?.find(a => 
+          a.title.toLowerCase() === title.toLowerCase()
+        );
+        
+        if (!matched) {
+          // Try partial match on first word
+          const firstWord = title.split(' ')[0].toLowerCase();
+          matched = searchData.data?.find(a => 
+            a.title.toLowerCase().includes(firstWord)
+          );
+        }
+        
+        if (matched) {
+          console.log('✅ Matched by title:', matched.title, 'Anikoto ID:', matched.id);
+          const seriesUrl = `https://anikotoapi.site/series/${matched.id}`;
+          return await this.fetchSeriesFromUrl(seriesUrl, cacheKey);
+        }
+        
+        throw new Error(`Anime "${title}" not found in Anikoto catalog. Try searching on the homepage.`);
       }
       
-      const response = await fetch(seriesUrl);
-      
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}. The anime may not be available yet.`);
-      }
-      
-      const result = await response.json();
-      
-      if (!result.ok) {
-        throw new Error(result.error || 'Series not found in Anikoto catalog');
-      }
-      
-      const data = result.data.anime || result.data;
-      const episodes = result.data.episodes || [];
-      
-      if (!episodes || episodes.length === 0) {
-        throw new Error('No episodes available for this series yet');
-      }
-      
-      // Cache the result
-      localStorage.setItem(cacheKey, JSON.stringify({
-        data: { ...data, episodes },
-        timestamp: Date.now()
-      }));
-      
-      console.log('✅ Fetched series from Anikoto:', data.title, `(${episodes.length} episodes)`);
-      return { ...data, episodes };
+      // Assume it's an Anikoto series ID
+      const seriesUrl = `https://anikotoapi.site/series/${animeId}`;
+      return await this.fetchSeriesFromUrl(seriesUrl, cacheKey);
       
     } catch (error) {
       console.warn('⚠️ Anikoto API failed:', error.message);
       throw error;
     }
+  }
+  
+  /**
+   * Helper to fetch series from URL and cache
+   */
+  async fetchSeriesFromUrl(seriesUrl, cacheKey) {
+    const response = await fetch(seriesUrl);
+    
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}. The anime may not be available yet.`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.ok) {
+      throw new Error(result.error || 'Series not found in Anikoto catalog');
+    }
+    
+    const data = result.data.anime || result.data;
+    const episodes = result.data.episodes || [];
+    
+    if (!episodes || episodes.length === 0) {
+      throw new Error('No episodes available for this series yet');
+    }
+    
+    // Cache the result
+    localStorage.setItem(cacheKey, JSON.stringify({
+      data: { ...data, episodes },
+      timestamp: Date.now()
+    }));
+    
+    console.log('✅ Fetched series from Anikoto:', data.title, `(${episodes.length} episodes)`);
+    return { ...data, episodes };
   }
 
   /**
@@ -454,43 +458,44 @@ class AnimePlayer {
   /**
    * Show video error with troubleshooting
    */
-  showVideoError(element, errorMessage, animeId, episodeNum) {
-    if (!element) return;
+  showVideoError(errorMessage, animeId, episodeNum) {
+    const playerWrapper = document.getElementById('player-wrapper');
+    if (!playerWrapper) return;
     
-    element.style.display = 'block';
-    element.innerHTML = `
-      <div class="error-container manga-panel">
-        <h3>⚠️ Video Unavailable</h3>
-        <p><strong>Error:</strong> ${errorMessage}</p>
+    playerWrapper.innerHTML = `
+      <div class="error-container manga-panel" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px;text-align:center;background:#000;color:#fff;">
+        <h3 style="font-family:var(--font-comic);font-size:2rem;margin-bottom:20px;color:var(--color-accent);">⚠️ Video Unavailable</h3>
+        <p style="font-family:var(--font-body);margin-bottom:30px;max-width:600px;"><strong>Error:</strong> ${errorMessage}</p>
         
-        <div class="troubleshooting">
-          <h4>💡 Troubleshooting Steps:</h4>
-          <ol>
+        <div class="troubleshooting" style="background:rgba(255,255,255,0.1);padding:20px;border-radius:8px;margin-bottom:30px;text-align:left;">
+          <h4 style="font-family:var(--font-comic);margin-bottom:10px;">💡 Troubleshooting Steps:</h4>
+          <ol style="font-family:var(--font-body);line-height:1.8;">
             <li>Try a different episode</li>
-            <li>Switch between Sub/Dub</li>
+            <li>Switch between Sub/Dub using the dropdown</li>
             <li>Check your internet connection</li>
             <li>Disable ad blocker</li>
             <li>Try a different anime</li>
           </ol>
         </div>
         
-        <div class="error-actions">
-          <button onclick="player.retryVideo()" class="btn-manga btn-retry">
+        <div class="error-actions" style="display:flex;gap:15px;flex-wrap:wrap;justify-content:center;">
+          <button onclick="player.retryVideo()" class="btn-manga btn-retry" style="background:var(--color-accent);color:#fff;border:2px solid #000;padding:12px 24px;font-family:var(--font-comic);cursor:pointer;font-size:1rem;">
             🔄 Retry
           </button>
-          <button onclick="player.tryPreviousEpisode()" class="btn-manga">
-            ⏮ Previous Episode
+          <button onclick="player.tryPreviousEpisode()" class="btn-manga" style="background:var(--color-white);color:#000;border:2px solid #000;padding:12px 24px;font-family:var(--font-comic);cursor:pointer;font-size:1rem;">
+            ⏮ Previous
           </button>
-          <button onclick="player.tryNextEpisode()" class="btn-manga">
-            Next Episode ⏭
+          <button onclick="player.tryNextEpisode()" class="btn-manga" style="background:var(--color-white);color:#000;border:2px solid #000;padding:12px 24px;font-family:var(--font-comic);cursor:pointer;font-size:1rem;">
+            Next ⏭
           </button>
         </div>
         
-        <div class="fallback-link">
-          <p>Or search on YouTube:</p>
+        <div class="fallback-link" style="margin-top:30px;">
+          <p style="font-family:var(--font-body);margin-bottom:10px;">Or search on YouTube:</p>
           <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(animeId + ' episode ' + episodeNum)}" 
              target="_blank" 
-             class="btn-manga btn-youtube">
+             class="btn-manga btn-youtube"
+             style="background:#ff0000;color:#fff;border:2px solid #000;padding:12px 24px;font-family:var(--font-comic);text-decoration:none;display:inline-block;">
             📺 Search YouTube
           </a>
         </div>
