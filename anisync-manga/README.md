@@ -181,10 +181,20 @@ app.listen(3000);
 - Jikan API may be rate limiting (wait 1 minute)
 - API is cached for 5 minutes - clear cache if needed
 
-### "Video unavailable"
-- Some anime may not be available on Consumet
-- Try a different episode or anime
-- Fallback shows YouTube trailer if available
+### "Video unavailable" or Not Playing
+The video player now uses **multi-source fallback**:
+1. **Consumet API** (Primary) - Searches Gogoanime streams
+2. **Gogoanime Direct** - Scrapes via CORS proxy
+3. **YouTube Official** - Fallback to official channels
+
+If video doesn't play:
+- Check browser console (F12) for detailed error messages
+- Try a different episode (some episodes may be unavailable)
+- Try a different anime (licensing varies by title)
+- Click "Watch on YouTube" button for official sources
+- Popular anime (One Piece, Naruto, etc.) have YouTube embeds
+
+**Debug Mode**: Open DevTools Console to see which sources are being tried and why they fail.
 
 ### CORS Errors
 - **Must use a web server** (not file:// protocol)
@@ -195,6 +205,11 @@ app.listen(3000);
 - Must be served over HTTPS (or localhost)
 - Check manifest.json is valid
 - Ensure service worker is registered
+
+### HLS Video Not Playing
+- HLS.js is loaded automatically for .m3u8 streams
+- Safari has native HLS support
+- If issues persist, try a different browser (Chrome recommended)
 
 ## 📊 Performance
 

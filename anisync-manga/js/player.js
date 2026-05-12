@@ -128,69 +128,159 @@ function updateEpisodeSelector(totalEpisodes) {
 }
 
 /**
- * Load video player
+ * Load video player with multi-source fallback
  */
 async function loadVideoPlayer(animeTitle, episodeNum) {
+  console.log('🎬 Loading video player:', { animeTitle, episodeNum });
+  
   playerContainer.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-family:var(--font-comic);flex-direction:column;gap:20px;">
       <div class="manga-loader"></div>
       <p>Loading Episode ${episodeNum}...</p>
+      <p style="font-size:0.9rem;color:var(--color-gray-pale);">Searching multiple sources</p>
     </div>
   `;
   
   try {
-    // Try Consumet API for streaming
+    // Try to get stream from multi-source API
     const streamData = await AniSyncAPI.getEpisodeStream(animeTitle, episodeNum);
     
-    if (streamData && streamData.sources && streamData.sources.length > 0) {
-      // Find best quality source
-      const bestSource = streamData.sources.find(s => s.quality === '1080p') || 
-                        streamData.sources.find(s => s.quality === '720p') || 
-                        streamData.sources[0];
-      
-      // Create iframe or video element
-      if (bestSource.url) {
-        playerContainer.innerHTML = `
-          <iframe 
-            src="${bestSource.url}" 
-            frameborder="0" 
-            allowfullscreen 
-            allow="autoplay; encrypted-media"
-            sandbox="allow-same-origin allow-scripts allow-presentation"
-          ></iframe>
-        `;
-        return;
-      }
+    console.log('📺 Stream data received:', streamData);
+    
+    if (!streamData || !streamData.url) {
+      throw new Error('No valid stream URL found');
     }
     
-    // Fallback: Try YouTube trailer
-    if (currentAnime.trailer) {
+    // Handle YouTube redirect
+    if (streamData.isRedirect) {
+      playerContainer.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-family:var(--font-comic);flex-direction:column;gap:20px;padding:20px;text-align:center;">
+          <p style="font-size:2rem;">📺</p>
+          <p style="font-size:1.5rem;">${streamData.message || 'Watch on YouTube'}</p>
+          <p style="font-size:0.9rem;color:var(--color-gray-pale);max-width:400px;">
+            Full episode not available for direct streaming. Click below to watch on official YouTube channels.
+          </p>
+          <a href="${streamData.url}" target="_blank" class="btn-manga" style="text-decoration:none;display:inline-block;margin-top:10px;">
+            🎬 Watch on YouTube →
+          </a>
+          <p style="font-size:0.8rem;color:var(--color-gray-pale);margin-top:15px;">
+            Source: ${streamData.source || 'YouTube'}
+          </p>
+        </div>
+      `;
+      return;
+    }
+    
+    // Check if it's a direct HLS/MP4 stream or needs iframe
+    const isDirectStream = streamData.type === 'hls' || streamData.type === 'mp4';
+    
+    if (isDirectStream && streamData.url.includes('.m3u8')) {
+      // Use HLS.js for .m3u8 streams
+      playerContainer.innerHTML = `
+        <video id="anime-video" controls style="width:100%;height:100%;" autoplay></video>
+      `;
+      
+      const video = document.getElementById('anime-video');
+      
+      // Load HLS.js if needed
+      if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(streamData.url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          console.log('✅ HLS manifest loaded');
+          video.play().catch(e => console.log('Autoplay prevented:', e));
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS support (Safari)
+        video.src = streamData.url;
+        video.addEventListener('loadedmetadata', () => {
+          video.play().catch(e => console.log('Autoplay prevented:', e));
+        });
+      } else {
+        throw new Error('HLS not supported in this browser');
+      }
+    } else {
+      // Use iframe for embed URLs
       playerContainer.innerHTML = `
         <iframe 
-          src="${currentAnime.trailer}" 
+          src="${streamData.url}" 
+          frameborder="0" 
+          allowfullscreen 
+          allow="autoplay; encrypted-media; picture-in-picture"
+          sandbox="allow-same-origin allow-scripts allow-presentation allow-popups"
+          style="width:100%;height:100%;border:none;"
+        ></iframe>
+      `;
+    }
+    
+    // Show success toast
+    showToast(`Playing Episode ${episodeNum} (${streamData.source || 'Stream'})`, 'success', 2000);
+    
+  } catch (error) {
+    console.error('❌ Player load error:', error);
+    
+    // Try YouTube embed for popular anime
+    const youtubeEmbed = AniSyncAPI.getYouTubeEmbed(animeTitle);
+    
+    if (youtubeEmbed) {
+      playerContainer.innerHTML = `
+        <iframe 
+          src="${youtubeEmbed}" 
           frameborder="0" 
           allowfullscreen
           allow="autoplay; encrypted-media"
+          style="width:100%;height:100%;border:none;"
         ></iframe>
       `;
       showToast('Playing trailer (full episode unavailable)', 'info', 3000);
       return;
     }
     
-    // Final fallback: Show message
-    throw new Error('No stream available');
-    
-  } catch (error) {
-    console.error('Player load error:', error);
-    
+    // Final fallback - detailed error message
     playerContainer.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-family:var(--font-comic);flex-direction:column;gap:20px;">
-        <p style="font-size:2rem;">📺</p>
-        <p>Video unavailable</p>
-        <p style="font-size:0.9rem;color:var(--color-gray-pale);">Try another episode or anime</p>
+      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-family:var(--font-comic);flex-direction:column;gap:20px;padding:20px;text-align:center;">
+        <p style="font-size:2rem;">💥</p>
+        <p style="font-size:1.5rem;">Video Unavailable</p>
+        <p style="font-size:0.9rem;color:var(--color-gray-pale);max-width:400px;">
+          We couldn't find a working stream for this episode. This might be due to:<br><br>
+          • Geo-blocking in your region<br>
+          • Temporary server issues<br>
+          • Anime licensing restrictions<br><br>
+          <strong>Error:</strong> ${error.message}
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:15px;">
+          <button class="btn-manga" onclick="retryVideo()">🔄 Retry</button>
+          <button class="btn-secondary" onclick="tryDifferentEpisode()">Try Different Episode</button>
+          <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(animeTitle + ' episode ' + episodeNum)}" target="_blank" class="btn-manga" style="background:var(--color-accent-red);">
+            ▶ Watch on YouTube
+          </a>
+        </div>
+        <p style="font-size:0.8rem;color:var(--color-gray-pale);margin-top:15px;">
+          Tip: Try searching for "${animeTitle}" on the homepage for alternative sources
+        </p>
       </div>
     `;
   }
+}
+
+/**
+ * Retry loading video
+ */
+function retryVideo() {
+  if (currentAnime) {
+    loadVideoPlayer(currentAnime.title, currentEpisode);
+  }
+}
+
+/**
+ * Try different episode
+ */
+function tryDifferentEpisode() {
+  const newEp = Math.max(1, currentEpisode - 1);
+  episodeSelect.value = newEp;
+  currentEpisode = newEp;
+  loadVideoPlayer(currentAnime.title, currentEpisode);
 }
 
 /**
