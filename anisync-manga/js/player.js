@@ -89,9 +89,22 @@ class AnimePlayer {
   }
 
   async loadAnimeFromURL() {
+    // Support both query parameter and path-based URLs
+    const urlParams = new URLSearchParams(window.location.search);
     const pathParts = window.location.pathname.split('/');
-    const animeId = pathParts[pathParts.indexOf('watch') + 1];
-    const episodeNum = parseInt(pathParts[pathParts.indexOf('watch') + 2]) || 1;
+    
+    // Try query parameter first: watch.html?anime={id}
+    let animeId = urlParams.get('anime');
+    let episodeNum = parseInt(urlParams.get('episode')) || 1;
+    
+    // Fallback to path-based: watch.html/{id}/{episode}
+    if (!animeId) {
+      const watchIndex = pathParts.indexOf('watch.html');
+      if (watchIndex !== -1 && pathParts[watchIndex + 1]) {
+        animeId = pathParts[watchIndex + 1];
+        episodeNum = parseInt(pathParts[watchIndex + 2]) || 1;
+      }
+    }
 
     if (!animeId) {
       this.showError('No anime selected', 'Please select an anime from the library');
@@ -108,14 +121,25 @@ class AnimePlayer {
   async loadVideo(animeId, episodeNum = 1) {
     const debugInfo = document.getElementById('debug-info');
     const playerWrapper = document.getElementById('player-wrapper');
+    const playerLoading = document.getElementById('player-loading');
     
-    this.showLoading(debugInfo);
+    console.log('🎬 Loading video:', { animeId, episodeNum });
+    
+    // Show loading state
+    if (playerLoading) playerLoading.style.display = 'flex';
+    if (debugInfo) {
+      debugInfo.style.display = 'block';
+      this.showLoading(debugInfo);
+    }
 
     try {
       // Step 1: Get anime details and episode list from Anikoto API
-      debugInfo.innerHTML = '🔄 Fetching anime details from Anikoto...';
+      if (debugInfo) debugInfo.innerHTML = '🔄 Fetching anime details from Anikoto...';
+      console.log('📡 Fetching from Anikoto API:', `https://anikotoapi.site/series/${animeId}`);
       
       const seriesData = await this.fetchAnikotoSeries(animeId);
+      
+      console.log('✅ Received series data:', seriesData);
       
       if (!seriesData || !seriesData.episodes) {
         throw new Error('Anime not found or no episodes available');
@@ -130,26 +154,34 @@ class AnimePlayer {
       }
 
       this.currentEpisode = episode;
-      debugInfo.innerHTML = `📺 Loading Episode ${episode.number}: ${episode.title || 'Episode ' + episode.number}...`;
+      if (debugInfo) debugInfo.innerHTML = `📺 Loading Episode ${episode.number}: ${episode.title || 'Episode ' + episode.number}...`;
+      console.log('📺 Selected episode:', episode);
 
       // Step 2: Get embed URL from MegaPlay
+      if (debugInfo) debugInfo.innerHTML += '<br>🔗 Getting stream URL from MegaPlay...';
       const streamUrl = await this.getMegaPlayStream(episode, 'sub');
       
+      let finalStreamUrl = streamUrl;
       if (!streamUrl) {
         // Try dub version
-        debugInfo.innerHTML = '⚠️ Sub not available, trying dub...';
+        if (debugInfo) debugInfo.innerHTML = '⚠️ Sub not available, trying dub...';
         const dubStream = await this.getMegaPlayStream(episode, 'dub');
         if (dubStream) {
-          streamUrl = dubStream;
+          finalStreamUrl = dubStream;
+          console.log('✅ Using DUB version');
         } else {
           throw new Error('No video source available for this episode');
         }
       }
 
-      debugInfo.innerHTML = `✅ Stream loaded! Playing Episode ${episode.number}`;
+      console.log('✅ Stream URL:', finalStreamUrl);
+      if (debugInfo) debugInfo.innerHTML = `✅ Stream loaded! Playing Episode ${episode.number}<br><small>${finalStreamUrl}</small>`;
+      
+      // Hide loading spinner
+      if (playerLoading) playerLoading.style.display = 'none';
       
       // Step 3: Embed the player
-      this.embedPlayer(playerWrapper, streamUrl);
+      this.embedPlayer(playerWrapper, finalStreamUrl);
       
       // Update UI
       this.updateEpisodeSelector(seriesData.episodes, episodeNum);
@@ -157,11 +189,12 @@ class AnimePlayer {
       
       // Hide debug info after successful load
       setTimeout(() => {
-        debugInfo.style.display = 'none';
-      }, 3000);
+        if (debugInfo) debugInfo.style.display = 'none';
+      }, 5000);
 
     } catch (error) {
       console.error('❌ Video load error:', error);
+      if (playerLoading) playerLoading.style.display = 'none';
       this.showVideoError(debugInfo, error.message, animeId, episodeNum);
     }
   }
@@ -183,32 +216,85 @@ class AnimePlayer {
     }
 
     try {
-      // Try fetching from Anikoto API
-      const response = await fetch(`https://anikotoapi.site/series/${animeId}`);
+      console.log('🔍 Trying to fetch from Anikoto with ID:', animeId);
       
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
+      // First check if animeId is numeric (MAL ID)
+      let seriesUrl;
+      if (/^\d+$/.test(animeId)) {
+        // It's a MAL ID - need to find the corresponding Anikoto series
+        console.log('ℹ️ Numeric ID detected, treating as MAL ID');
+        // Try fetching recent anime and finding match
+        const recentResponse = await fetch('https://anikotoapi.site/recent-anime?page=1&per_page=100');
+        const recentData = await recentResponse.json();
+        
+        const found = recentData.data?.find(a => a.mal_id === parseInt(animeId));
+        if (found) {
+          console.log('✅ Found match in recent anime:', found.title);
+          // Use the found series ID
+          seriesUrl = `https://anikotoapi.site/series/${found.id}`;
+        } else {
+          // Try searching by title using Jikan first
+          console.log('⚠️ Not found in recent anime, trying Jikan lookup...');
+          const jikanResponse = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/full`);
+          const jikanData = await jikanResponse.json();
+          
+          if (jikanData.data) {
+            const title = jikanData.data.title_english || jikanData.data.title;
+            console.log('📺 Found anime title from Jikan:', title);
+            
+            // Search for this title in Anikoto
+            const searchResponse = await fetch('https://anikotoapi.site/recent-anime?page=1&per_page=100');
+            const searchData = await searchResponse.json();
+            
+            const matched = searchData.data?.find(a => 
+              a.title.toLowerCase().includes(title.split(' ')[0].toLowerCase())
+            );
+            
+            if (matched) {
+              console.log('✅ Matched by title:', matched.title);
+              seriesUrl = `https://anikotoapi.site/series/${matched.id}`;
+            } else {
+              throw new Error(`Anime not found in Anikoto catalog. Try searching for "${title}" on the homepage.`);
+            }
+          } else {
+            throw new Error('Anime not found in MyAnimeList database');
+          }
+        }
+      } else {
+        // Assume it's an Anikoto series ID (numeric but as string, or slug)
+        seriesUrl = `https://anikotoapi.site/series/${animeId}`;
       }
       
-      const data = await response.json();
+      const response = await fetch(seriesUrl);
+      
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}. The anime may not be available yet.`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Series not found in Anikoto catalog');
+      }
+      
+      const data = result.data.anime || result.data;
+      const episodes = result.data.episodes || [];
+      
+      if (!episodes || episodes.length === 0) {
+        throw new Error('No episodes available for this series yet');
+      }
       
       // Cache the result
       localStorage.setItem(cacheKey, JSON.stringify({
-        data,
+        data: { ...data, episodes },
         timestamp: Date.now()
       }));
       
-      console.log('✅ Fetched series from Anikoto:', data.title);
-      return data;
+      console.log('✅ Fetched series from Anikoto:', data.title, `(${episodes.length} episodes)`);
+      return { ...data, episodes };
       
     } catch (error) {
-      console.warn('⚠️ Anikoto API failed, trying fallback...');
-      
-      // Fallback: Use MAL ID if animeId is numeric
-      if (/^\d+$/.test(animeId)) {
-        return this.fetchByMALId(animeId);
-      }
-      
+      console.warn('⚠️ Anikoto API failed:', error.message);
       throw error;
     }
   }
@@ -448,8 +534,18 @@ class AnimePlayer {
   }
 
   getCurrentAnimeId() {
-    const pathParts = window.location.pathname.split('/');
-    return pathParts[pathParts.indexOf('watch') + 1];
+    const urlParams = new URLSearchParams(window.location.search);
+    let animeId = urlParams.get('anime');
+    
+    if (!animeId) {
+      const pathParts = window.location.pathname.split('/');
+      const watchIndex = pathParts.indexOf('watch.html');
+      if (watchIndex !== -1 && pathParts[watchIndex + 1]) {
+        animeId = pathParts[watchIndex + 1];
+      }
+    }
+    
+    return animeId;
   }
 
   syncPlayback(currentTime, duration) {
