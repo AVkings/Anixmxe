@@ -1,505 +1,479 @@
-/* ===================================
-   ANISYNC - Player & Watch Page Logic
-   Video Player, Chat, Room Management
-   =================================== */
-
-// State
-let currentAnime = null;
-let currentEpisode = 1;
-let roomId = null;
-let isHost = false;
-let playerName = null;
-
-// DOM Elements
-const playerContainer = document.getElementById('player-container');
-const animeTitleEl = document.getElementById('anime-title');
-const animeMetaEl = document.getElementById('anime-meta');
-const animeSynopsisEl = document.getElementById('anime-synopsis');
-const episodeSelect = document.getElementById('episode-select');
-const createRoomBtn = document.getElementById('create-room-btn');
-const joinRoomBtn = document.getElementById('join-room-btn');
-const chatMessages = document.getElementById('chat-messages');
-const chatInput = document.getElementById('chat-input');
-const sendBtn = document.getElementById('send-btn');
-const emojiBtn = document.getElementById('emoji-btn');
-
 /**
- * Initialize watch page
+ * AniSync Video Player Module
+ * Handles video playback with Anikoto/MegaPlay integration
+ * 
+ * API Flow:
+ * 1. Fetch anime series from Anikoto API (https://anikotoapi.site/series/{id})
+ * 2. Get episode_embed_id from episode data
+ * 3. Construct MegaPlay URL: https://megaplay.buzz/stream/s-2/{episode_embed_id}/{language}
+ * 4. Embed iframe with postMessage event handling
  */
-async function init() {
-  console.log('📺 Watch Page Loading...');
-  
-  // Get anime ID from URL
-  const animeId = AniSyncUtils.getUrlParam('anime');
-  roomId = AniSyncUtils.getUrlParam('room');
-  isHost = AniSyncUtils.getUrlParam('host') === 'true';
-  
-  // Generate random player name
-  playerName = `Reader_${Math.floor(Math.random() * 10000)}`;
-  
-  if (!animeId) {
-    showToast('No anime selected!', 'error');
-    setTimeout(() => window.location.href = 'index.html', 2000);
-    return;
+
+class AnimePlayer {
+  constructor() {
+    this.player = null;
+    this.hls = null;
+    this.currentEpisode = null;
+    this.autoNext = true;
+    this.isHost = false;
+    this.roomId = null;
+    this.init();
   }
-  
-  try {
-    // Load anime details
-    await loadAnimeDetails(animeId);
+
+  init() {
+    // Check if we're in a room
+    const urlParams = new URLSearchParams(window.location.search);
+    this.roomId = urlParams.get('room');
+    this.isHost = urlParams.get('host') === 'true';
     
-    // Setup event listeners
-    setupEventListeners();
-    
-    // Join room if room ID exists
-    if (roomId) {
-      joinRoom(roomId, isHost);
-    }
-    
-    // Disable dev tools
-    AniSyncUtils.disableDevTools();
-    
-    showToast('Enjoy watching! 📺✨', 'success', 2000);
-  } catch (error) {
-    console.error('Watch page error:', error);
-    showToast('Failed to load anime. Retrying...', 'error');
-    setTimeout(() => window.location.href = 'index.html', 2000);
+    this.setupEventListeners();
+    this.loadAnimeFromURL();
   }
-}
 
-/**
- * Load anime details and display
- */
-async function loadAnimeDetails(animeId) {
-  showPlayerLoading(true);
-  
-  try {
-    const details = await AniSyncAPI.getAnimeDetails(animeId);
+  setupEventListeners() {
+    // Auto-hide controls
+    let controlsTimeout;
+    const playerContainer = document.getElementById('player-container');
     
-    if (!details) {
-      throw new Error('Anime not found');
+    if (playerContainer) {
+      playerContainer.addEventListener('mousemove', () => {
+        playerContainer.classList.remove('controls-hidden');
+        clearTimeout(controlsTimeout);
+        controlsTimeout = setTimeout(() => {
+          if (this.player && !this.player.paused) {
+            playerContainer.classList.add('controls-hidden');
+          }
+        }, 3000);
+      });
     }
-    
-    currentAnime = AniSyncAPI.formatAnimeData(details);
-    
-    // Update UI
-    animeTitleEl.textContent = currentAnime.title;
-    animeMetaEl.innerHTML = `
-      <span>⭐ ${AniSyncUtils.formatScore(currentAnime.score)}</span>
-      <span>📖 ${currentAnime.episodes} Episodes</span>
-      <span>📅 ${currentAnime.year}</span>
-      <span>${currentAnime.status}</span>
-    `;
-    animeSynopsisEl.textContent = currentAnime.synopsis;
-    
-    // Populate episode selector
-    updateEpisodeSelector(currentAnime.episodes);
-    
-    // Load video player
-    await loadVideoPlayer(currentAnime.title, 1);
-    
-  } catch (error) {
-    console.error('Load details error:', error);
-    showToast('Failed to load anime details', 'error');
-    
-    // Show fallback content
-    animeTitleEl.textContent = 'Error Loading Anime';
-    animeSynopsisEl.textContent = 'Unable to load this anime. Please try another one.';
-    playerContainer.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-family:var(--font-comic);flex-direction:column;gap:20px;">
-        <p style="font-size:2rem;">💥 Oops!</p>
-        <p>Failed to load this chapter</p>
-        <button class="btn-manga" onclick="window.location.href='index.html'">Back to Library</button>
-      </div>
-    `;
-  } finally {
-    showPlayerLoading(false);
-  }
-}
 
-/**
- * Update episode selector dropdown
- */
-function updateEpisodeSelector(totalEpisodes) {
-  const count = typeof totalEpisodes === 'number' ? totalEpisodes : 1;
-  
-  episodeSelect.innerHTML = Array.from({ length: Math.min(count, 100) }, (_, i) => 
-    `<option value="${i + 1}">Episode ${i + 1}</option>`
-  ).join('');
-}
-
-/**
- * Load video player with multi-source fallback
- */
-async function loadVideoPlayer(animeTitle, episodeNum) {
-  console.log('🎬 Loading video player:', { animeTitle, episodeNum });
-  
-  playerContainer.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-family:var(--font-comic);flex-direction:column;gap:20px;">
-      <div class="manga-loader"></div>
-      <p>Loading Episode ${episodeNum}...</p>
-      <p style="font-size:0.9rem;color:var(--color-gray-pale);">Searching multiple sources</p>
-    </div>
-  `;
-  
-  try {
-    // Try to get stream from multi-source API
-    const streamData = await AniSyncAPI.getEpisodeStream(animeTitle, episodeNum);
-    
-    console.log('📺 Stream data received:', streamData);
-    
-    if (!streamData || !streamData.url) {
-      throw new Error('No valid stream URL found');
-    }
-    
-    // Handle YouTube redirect
-    if (streamData.isRedirect) {
-      playerContainer.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-family:var(--font-comic);flex-direction:column;gap:20px;padding:20px;text-align:center;">
-          <p style="font-size:2rem;">📺</p>
-          <p style="font-size:1.5rem;">${streamData.message || 'Watch on YouTube'}</p>
-          <p style="font-size:0.9rem;color:var(--color-gray-pale);max-width:400px;">
-            Full episode not available for direct streaming. Click below to watch on official YouTube channels.
-          </p>
-          <a href="${streamData.url}" target="_blank" class="btn-manga" style="text-decoration:none;display:inline-block;margin-top:10px;">
-            🎬 Watch on YouTube →
-          </a>
-          <p style="font-size:0.8rem;color:var(--color-gray-pale);margin-top:15px;">
-            Source: ${streamData.source || 'YouTube'}
-          </p>
-        </div>
-      `;
-      return;
-    }
-    
-    // Check if it's a direct HLS/MP4 stream or needs iframe
-    const isDirectStream = streamData.type === 'hls' || streamData.type === 'mp4';
-    
-    if (isDirectStream && streamData.url.includes('.m3u8')) {
-      // Use HLS.js for .m3u8 streams
-      playerContainer.innerHTML = `
-        <video id="anime-video" controls style="width:100%;height:100%;" autoplay></video>
-      `;
-      
-      const video = document.getElementById('anime-video');
-      
-      // Load HLS.js if needed
-      if (Hls.isSupported()) {
-        const hls = new Hls();
-        hls.loadSource(streamData.url);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log('✅ HLS manifest loaded');
-          video.play().catch(e => console.log('Autoplay prevented:', e));
-        });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari)
-        video.src = streamData.url;
-        video.addEventListener('loadedmetadata', () => {
-          video.play().catch(e => console.log('Autoplay prevented:', e));
-        });
-      } else {
-        throw new Error('HLS not supported in this browser');
-      }
-    } else {
-      // Use iframe for embed URLs
-      playerContainer.innerHTML = `
-        <iframe 
-          src="${streamData.url}" 
-          frameborder="0" 
-          allowfullscreen 
-          allow="autoplay; encrypted-media; picture-in-picture"
-          sandbox="allow-same-origin allow-scripts allow-presentation allow-popups"
-          style="width:100%;height:100%;border:none;"
-        ></iframe>
-      `;
-    }
-    
-    // Show success toast
-    showToast(`Playing Episode ${episodeNum} (${streamData.source || 'Stream'})`, 'success', 2000);
-    
-  } catch (error) {
-    console.error('❌ Player load error:', error);
-    
-    // Try YouTube embed for popular anime
-    const youtubeEmbed = AniSyncAPI.getYouTubeEmbed(animeTitle);
-    
-    if (youtubeEmbed) {
-      playerContainer.innerHTML = `
-        <iframe 
-          src="${youtubeEmbed}" 
-          frameborder="0" 
-          allowfullscreen
-          allow="autoplay; encrypted-media"
-          style="width:100%;height:100%;border:none;"
-        ></iframe>
-      `;
-      showToast('Playing trailer (full episode unavailable)', 'info', 3000);
-      return;
-    }
-    
-    // Final fallback - detailed error message
-    playerContainer.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-family:var(--font-comic);flex-direction:column;gap:20px;padding:20px;text-align:center;">
-        <p style="font-size:2rem;">💥</p>
-        <p style="font-size:1.5rem;">Video Unavailable</p>
-        <p style="font-size:0.9rem;color:var(--color-gray-pale);max-width:400px;">
-          We couldn't find a working stream for this episode. This might be due to:<br><br>
-          • Geo-blocking in your region<br>
-          • Temporary server issues<br>
-          • Anime licensing restrictions<br><br>
-          <strong>Error:</strong> ${error.message}
-        </p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:15px;">
-          <button class="btn-manga" onclick="retryVideo()">🔄 Retry</button>
-          <button class="btn-secondary" onclick="tryDifferentEpisode()">Try Different Episode</button>
-          <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(animeTitle + ' episode ' + episodeNum)}" target="_blank" class="btn-manga" style="background:var(--color-accent-red);">
-            ▶ Watch on YouTube
-          </a>
-        </div>
-        <p style="font-size:0.8rem;color:var(--color-gray-pale);margin-top:15px;">
-          Tip: Try searching for "${animeTitle}" on the homepage for alternative sources
-        </p>
-      </div>
-    `;
-  }
-}
-
-/**
- * Retry loading video
- */
-function retryVideo() {
-  if (currentAnime) {
-    loadVideoPlayer(currentAnime.title, currentEpisode);
-  }
-}
-
-/**
- * Try different episode
- */
-function tryDifferentEpisode() {
-  const newEp = Math.max(1, currentEpisode - 1);
-  episodeSelect.value = newEp;
-  currentEpisode = newEp;
-  loadVideoPlayer(currentAnime.title, currentEpisode);
-}
-
-/**
- * Show player loading state
- */
-function showPlayerLoading(show) {
-  // Handled in loadVideoPlayer
-}
-
-/**
- * Join or create room
- */
-function joinRoom(roomId, host = false) {
-  console.log('Joining room:', roomId, 'as host:', host);
-  
-  // Store room info in localStorage for cross-tab communication
-  const roomKey = `anisync_room_${roomId}`;
-  
-  if (host) {
-    // Create room
-    const roomData = {
-      id: roomId,
-      host: playerName,
-      hostName: playerName,
-      anime: currentAnime,
-      episode: currentEpisode,
-      playing: false,
-      currentTime: 0,
-      users: [playerName],
-      createdAt: Date.now()
-    };
-    
-    AniSyncUtils.storage.set(roomKey, roomData);
-    AniSyncUtils.storage.set(`${roomKey}_messages`, []);
-    
-    addSystemMessage(`Room created! Share the link to invite friends.`);
-    showToast('Room created! Copy the URL to share.', 'success');
-  } else {
-    // Join existing room
-    const roomData = AniSyncUtils.storage.get(roomKey);
-    
-    if (roomData) {
-      roomData.users.push(playerName);
-      AniSyncUtils.storage.set(roomKey, roomData);
-      
-      addSystemMessage(`Joined room hosted by ${roomData.hostName}`);
-      showToast('Joined room!', 'success');
-      
-      // Listen for host updates
-      setupRoomListener(roomId);
-    } else {
-      showToast('Room not found', 'error');
-    }
-  }
-}
-
-/**
- * Setup room listener for cross-tab sync
- */
-function setupRoomListener(roomId) {
-  const roomKey = `anisync_room_${roomId}`;
-  
-  // Listen for storage events (cross-tab communication)
-  window.addEventListener('storage', (e) => {
-    if (e.key === roomKey) {
-      const roomData = JSON.parse(e.newValue);
-      
-      if (roomData && !isHost) {
-        // Sync with host
-        if (roomData.playing !== undefined) {
-          console.log('Sync: play state changed', roomData.playing);
-        }
-        if (roomData.currentTime !== undefined) {
-          console.log('Sync: time changed', roomData.currentTime);
-        }
-      }
-    }
-    
-    // Check for new messages
-    if (e.key === `${roomKey}_messages`) {
-      loadChatMessages(roomId);
-    }
-  });
-  
-  // Poll for updates
-  setInterval(() => {
-    loadChatMessages(roomId);
-  }, 1000);
-}
-
-/**
- * Send chat message
- */
-function sendMessage() {
-  const text = chatInput.value.trim();
-  
-  if (!text) return;
-  
-  const message = {
-    id: Date.now(),
-    sender: playerName,
-    text,
-    timestamp: Date.now()
-  };
-  
-  if (roomId) {
-    const roomKey = `anisync_room_${roomId}_messages`;
-    const messages = AniSyncUtils.storage.get(roomKey, []);
-    messages.push(message);
-    AniSyncUtils.storage.set(roomKey, messages);
-  }
-  
-  // Display locally
-  displayMessage(message);
-  chatInput.value = '';
-}
-
-/**
- * Display chat message
- */
-function displayMessage(message) {
-  const msgEl = document.createElement('div');
-  msgEl.className = 'chat-message';
-  msgEl.innerHTML = `
-    <div class="sender">${escapeHtml(message.sender)}</div>
-    <div class="text">${escapeHtml(message.text)}</div>
-  `;
-  
-  chatMessages.appendChild(msgEl);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-/**
- * Add system message
- */
-function addSystemMessage(text) {
-  displayMessage({
-    sender: 'System',
-    text,
-    timestamp: Date.now()
-  });
-}
-
-/**
- * Load chat messages from storage
- */
-function loadChatMessages(roomId) {
-  const roomKey = `anisync_room_${roomId}_messages`;
-  const messages = AniSyncUtils.storage.get(roomKey, []);
-  
-  // Clear and reload (simple approach)
-  chatMessages.innerHTML = '';
-  messages.forEach(msg => displayMessage(msg));
-}
-
-/**
- * Escape HTML to prevent XSS
- */
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-/**
- * Setup event listeners
- */
-function setupEventListeners() {
-  // Episode selector
-  episodeSelect.addEventListener('change', (e) => {
-    currentEpisode = parseInt(e.target.value);
-    loadVideoPlayer(currentAnime.title, currentEpisode);
-    showToast(`Loading Episode ${currentEpisode}...`, 'info', 1500);
-  });
-  
-  // Create room button
-  createRoomBtn.addEventListener('click', () => {
-    if (!currentAnime) return;
-    
-    const newRoomId = AniSyncUtils.generateId(6);
-    const url = `${window.location.origin}${window.location.pathname}?anime=${currentAnime.id}&room=${newRoomId}&host=true`;
-    
-    AniSyncUtils.copyToClipboard(url).then(() => {
-      window.location.href = url;
+    // Listen for MegaPlay postMessage events
+    window.addEventListener('message', (event) => {
+      this.handlePlayerMessage(event);
     });
-  });
-  
-  // Join room button
-  joinRoomBtn.addEventListener('click', () => {
-    const inputRoomId = prompt('Enter room ID:');
-    if (inputRoomId) {
-      const url = `${window.location.origin}${window.location.pathname}?anime=${currentAnime.id}&room=${inputRoomId}`;
-      window.location.href = url;
+  }
+
+  handlePlayerMessage(event) {
+    // Verify origin for security
+    if (!event.origin.includes('megaplay.buzz')) {
+      return;
     }
-  });
-  
-  // Chat input
-  sendBtn.addEventListener('click', sendMessage);
-  chatInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendMessage();
-  });
-  
-  // Emoji button (simple implementation)
-  emojiBtn.addEventListener('click', () => {
-    const emojis = ['😀', '😂', '😍', '🔥', '❤️', '👍', '🎉', '✨'];
-    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-    chatInput.value += randomEmoji;
-    chatInput.focus();
-  });
-  
-  // Add ripple effect to buttons
-  document.querySelectorAll('.btn-manga, .btn-secondary').forEach(btn => {
-    btn.addEventListener('click', AniSyncUtils.addRipple);
-  });
+
+    let data = event.data;
+    
+    // Parse string data
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch (e) {
+        return;
+      }
+    }
+
+    console.log('📺 Player Event:', data);
+
+    // Handle different event types
+    if (data.channel === 'megacloud' || data.type === 'watching-log') {
+      if (data.event === 'complete' || data.type === 'watching-log') {
+        // Episode completed or progress update
+        if (data.event === 'complete' && this.autoNext) {
+          this.playNextEpisode();
+        }
+        
+        // Sync with room if host
+        if (this.isHost && this.roomId) {
+          this.syncPlayback(data.currentTime, data.duration);
+        }
+      }
+    }
+  }
+
+  async loadAnimeFromURL() {
+    const pathParts = window.location.pathname.split('/');
+    const animeId = pathParts[pathParts.indexOf('watch') + 1];
+    const episodeNum = parseInt(pathParts[pathParts.indexOf('watch') + 2]) || 1;
+
+    if (!animeId) {
+      this.showError('No anime selected', 'Please select an anime from the library');
+      return;
+    }
+
+    await this.loadVideo(animeId, episodeNum);
+  }
+
+  /**
+   * Load video using Anikoto API + MegaPlay
+   * Multi-tier fallback system
+   */
+  async loadVideo(animeId, episodeNum = 1) {
+    const debugInfo = document.getElementById('debug-info');
+    const playerWrapper = document.getElementById('player-wrapper');
+    
+    this.showLoading(debugInfo);
+
+    try {
+      // Step 1: Get anime details and episode list from Anikoto API
+      debugInfo.innerHTML = '🔄 Fetching anime details from Anikoto...';
+      
+      const seriesData = await this.fetchAnikotoSeries(animeId);
+      
+      if (!seriesData || !seriesData.episodes) {
+        throw new Error('Anime not found or no episodes available');
+      }
+
+      // Find the requested episode
+      const episode = seriesData.episodes.find(ep => ep.number === episodeNum) || 
+                      seriesData.episodes[episodeNum - 1];
+      
+      if (!episode) {
+        throw new Error(`Episode ${episodeNum} not found`);
+      }
+
+      this.currentEpisode = episode;
+      debugInfo.innerHTML = `📺 Loading Episode ${episode.number}: ${episode.title || 'Episode ' + episode.number}...`;
+
+      // Step 2: Get embed URL from MegaPlay
+      const streamUrl = await this.getMegaPlayStream(episode, 'sub');
+      
+      if (!streamUrl) {
+        // Try dub version
+        debugInfo.innerHTML = '⚠️ Sub not available, trying dub...';
+        const dubStream = await this.getMegaPlayStream(episode, 'dub');
+        if (dubStream) {
+          streamUrl = dubStream;
+        } else {
+          throw new Error('No video source available for this episode');
+        }
+      }
+
+      debugInfo.innerHTML = `✅ Stream loaded! Playing Episode ${episode.number}`;
+      
+      // Step 3: Embed the player
+      this.embedPlayer(playerWrapper, streamUrl);
+      
+      // Update UI
+      this.updateEpisodeSelector(seriesData.episodes, episodeNum);
+      this.updateAnimeInfo(seriesData);
+      
+      // Hide debug info after successful load
+      setTimeout(() => {
+        debugInfo.style.display = 'none';
+      }, 3000);
+
+    } catch (error) {
+      console.error('❌ Video load error:', error);
+      this.showVideoError(debugInfo, error.message, animeId, episodeNum);
+    }
+  }
+
+  /**
+   * Fetch anime series data from Anikoto API
+   */
+  async fetchAnikotoSeries(animeId) {
+    const cacheKey = `anisync_series_${animeId}`;
+    const cached = localStorage.getItem(cacheKey);
+    
+    // Return cached data if less than 5 minutes old
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < 5 * 60 * 1000) {
+        console.log('📦 Using cached series data');
+        return data;
+      }
+    }
+
+    try {
+      // Try fetching from Anikoto API
+      const response = await fetch(`https://anikotoapi.site/series/${animeId}`);
+      
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Cache the result
+      localStorage.setItem(cacheKey, JSON.stringify({
+        data,
+        timestamp: Date.now()
+      }));
+      
+      console.log('✅ Fetched series from Anikoto:', data.title);
+      return data;
+      
+    } catch (error) {
+      console.warn('⚠️ Anikoto API failed, trying fallback...');
+      
+      // Fallback: Use MAL ID if animeId is numeric
+      if (/^\d+$/.test(animeId)) {
+        return this.fetchByMALId(animeId);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch by MAL ID using Anikoto API
+   */
+  async fetchByMALId(malId) {
+    try {
+      // Search for anime with this MAL ID
+      const response = await fetch(`https://anikotoapi.site/recent-anime?page=1&per_page=100`);
+      const data = await response.json();
+      
+      const anime = data.results?.find(a => a.mal_id === parseInt(malId));
+      
+      if (anime) {
+        return this.fetchAnikotoSeries(anime.id);
+      }
+      
+      throw new Error('Anime not found with MAL ID');
+    } catch (error) {
+      throw new Error('Could not find anime with provided ID');
+    }
+  }
+
+  /**
+   * Get MegaPlay stream URL
+   * Uses the episode_embed_id from Anikoto
+   */
+  async getMegaPlayStream(episode, language = 'sub') {
+    const embedId = episode.episode_embed_id || episode.id;
+    
+    if (!embedId) {
+      throw new Error('No episode embed ID available');
+    }
+
+    // Construct MegaPlay URL
+    // Format: https://megaplay.buzz/stream/s-2/{episode_embed_id}/{language}
+    const streamUrl = `https://megaplay.buzz/stream/s-2/${embedId}/${language}`;
+    
+    console.log('🎬 MegaPlay Stream URL:', streamUrl);
+    
+    // Verify the URL is accessible (optional check)
+    try {
+      // We can't directly fetch due to CORS, but we can check if the format is valid
+      if (!streamUrl.includes('megaplay.buzz')) {
+        throw new Error('Invalid stream URL format');
+      }
+      return streamUrl;
+    } catch (error) {
+      console.error('❌ Stream URL validation failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Embed MegaPlay iframe player
+   */
+  embedPlayer(container, streamUrl) {
+    if (!container) return;
+
+    // Clear previous player
+    container.innerHTML = '';
+
+    // Create iframe with proper attributes for security and functionality
+    const iframe = document.createElement('iframe');
+    iframe.src = streamUrl;
+    iframe.width = '100%';
+    iframe.height = '100%';
+    iframe.frameBorder = '0';
+    iframe.scrolling = 'no';
+    iframe.allowFullscreen = true;
+    iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+    iframe.referrerPolicy = 'no-referrer';
+    iframe.style.border = 'none';
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    
+    // Add sandbox attributes for security (but allow necessary features)
+    iframe.sandbox = 'allow-same-origin allow-scripts allow-popups allow-forms allow-pointer-lock allow-top-navigation-by-user-activation';
+
+    container.appendChild(iframe);
+    
+    console.log('✅ Player embedded successfully');
+    
+    // Store reference for controls
+    this.player = iframe;
+  }
+
+  /**
+   * Update episode selector dropdown
+   */
+  updateEpisodeSelector(episodes, currentEpisodeNum) {
+    const selector = document.getElementById('episode-selector');
+    if (!selector || !episodes) return;
+
+    selector.innerHTML = '';
+    
+    episodes.forEach((ep, index) => {
+      const option = document.createElement('option');
+      option.value = ep.number || index + 1;
+      option.textContent = `Episode ${ep.number || index + 1}${ep.title ? ': ' + ep.title : ''}`;
+      
+      if ((ep.number || index + 1) === currentEpisodeNum) {
+        option.selected = true;
+      }
+      
+      selector.appendChild(option);
+    });
+
+    // Add change listener
+    selector.addEventListener('change', (e) => {
+      const newEpNum = parseInt(e.target.value);
+      this.loadVideo(this.getCurrentAnimeId(), newEpNum);
+      
+      // Notify room members if in a room
+      if (this.roomId && this.isHost) {
+        this.notifyRoomEpisodeChange(newEpNum);
+      }
+    });
+  }
+
+  /**
+   * Update anime info display
+   */
+  updateAnimeInfo(seriesData) {
+    const titleEl = document.getElementById('anime-title');
+    const posterEl = document.getElementById('anime-poster');
+    
+    if (titleEl) {
+      titleEl.textContent = seriesData.title || seriesData.name || 'Unknown Anime';
+    }
+    
+    if (posterEl && seriesData.poster) {
+      posterEl.src = seriesData.poster;
+      posterEl.alt = seriesData.title;
+    }
+  }
+
+  /**
+   * Show loading state
+   */
+  showLoading(element) {
+    if (!element) return;
+    
+    element.style.display = 'block';
+    element.innerHTML = `
+      <div class="loading-spinner">
+        <div class="manga-panel-loading">
+          <div class="speed-lines"></div>
+          <span>📖 Loading Episode...</span>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Show video error with troubleshooting
+   */
+  showVideoError(element, errorMessage, animeId, episodeNum) {
+    if (!element) return;
+    
+    element.style.display = 'block';
+    element.innerHTML = `
+      <div class="error-container manga-panel">
+        <h3>⚠️ Video Unavailable</h3>
+        <p><strong>Error:</strong> ${errorMessage}</p>
+        
+        <div class="troubleshooting">
+          <h4>💡 Troubleshooting Steps:</h4>
+          <ol>
+            <li>Try a different episode</li>
+            <li>Switch between Sub/Dub</li>
+            <li>Check your internet connection</li>
+            <li>Disable ad blocker</li>
+            <li>Try a different anime</li>
+          </ol>
+        </div>
+        
+        <div class="error-actions">
+          <button onclick="player.retryVideo()" class="btn-manga btn-retry">
+            🔄 Retry
+          </button>
+          <button onclick="player.tryPreviousEpisode()" class="btn-manga">
+            ⏮ Previous Episode
+          </button>
+          <button onclick="player.tryNextEpisode()" class="btn-manga">
+            Next Episode ⏭
+          </button>
+        </div>
+        
+        <div class="fallback-link">
+          <p>Or search on YouTube:</p>
+          <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(animeId + ' episode ' + episodeNum)}" 
+             target="_blank" 
+             class="btn-manga btn-youtube">
+            📺 Search YouTube
+          </a>
+        </div>
+      </div>
+    `;
+  }
+
+  showError(title, message) {
+    const playerWrapper = document.getElementById('player-wrapper');
+    if (playerWrapper) {
+      playerWrapper.innerHTML = `
+        <div class="error-container manga-panel">
+          <h3>⚠️ ${title}</h3>
+          <p>${message}</p>
+          <a href="/" class="btn-manga">🏠 Back to Home</a>
+        </div>
+      `;
+    }
+  }
+
+  retryVideo() {
+    if (this.currentEpisode) {
+      this.loadVideo(this.getCurrentAnimeId(), this.currentEpisode.number);
+    }
+  }
+
+  tryPreviousEpisode() {
+    if (this.currentEpisode && this.currentEpisode.number > 1) {
+      this.loadVideo(this.getCurrentAnimeId(), this.currentEpisode.number - 1);
+    }
+  }
+
+  tryNextEpisode() {
+    if (this.currentEpisode) {
+      this.loadVideo(this.getCurrentAnimeId(), this.currentEpisode.number + 1);
+    }
+  }
+
+  playNextEpisode() {
+    this.tryNextEpisode();
+  }
+
+  getCurrentAnimeId() {
+    const pathParts = window.location.pathname.split('/');
+    return pathParts[pathParts.indexOf('watch') + 1];
+  }
+
+  syncPlayback(currentTime, duration) {
+    // Send sync event to room members (implemented in room.js)
+    if (window.roomManager && this.roomId) {
+      window.roomManager.syncPlayback(currentTime, duration);
+    }
+  }
+
+  notifyRoomEpisodeChange(episodeNum) {
+    // Notify room members of episode change
+    if (window.roomManager && this.roomId) {
+      window.roomManager.changeEpisode(episodeNum);
+    }
+  }
 }
 
-// Initialize on DOM ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
+// Initialize player when DOM is ready
+let player;
+document.addEventListener('DOMContentLoaded', () => {
+  player = new AnimePlayer();
+});
+
+// Export for use in other modules
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = AnimePlayer;
 }
